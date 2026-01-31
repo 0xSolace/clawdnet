@@ -12,15 +12,14 @@ export async function GET(
     // Handle both full UUID and short txn_ format
     let transactionId = id;
     if (id.startsWith('txn_')) {
-      // Search by partial ID
-      const { data: transactions } = await supabase
-        .from('transactions')
-        .select('id')
-        .ilike('id', `${id.slice(4)}%`)
-        .limit(1);
+      const partialId = id.slice(4);
+      const { data: result } = await supabase
+        .rpc('find_transaction_by_prefix', { prefix: partialId });
       
-      if (transactions && transactions.length > 0) {
-        transactionId = transactions[0].id;
+      if (result && result.length > 0) {
+        transactionId = result[0].id;
+      } else {
+        return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
       }
     }
 
