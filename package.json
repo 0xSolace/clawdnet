@@ -12,7 +12,14 @@
     "build:docs": "pnpm --filter @clawdnet/docs build"
   },
   "devDependencies": {
+    "dotenv": "^17.2.3",
+    "pg": "^8.18.0",
     "turbo": "^2.5.0"
   },
-  "packageManager": "pnpm@10.28.2"
+  "packageManager": "pnpm@10.28.2",
+  "dependencies": {
+    "@types/node": "^25.1.0",
+    "@types/pg": "^8.16.0",
+    "tsx": "^4.21.0"
+  }
 }
