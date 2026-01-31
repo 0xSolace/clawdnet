@@ -76,8 +76,7 @@ Contributions are welcome! Please read our contributing guidelines (coming soon)
 
 - **Website**: https://clawdnet.xyz
 - **Docs**: https://clawdnet.xyz/docs
-- **Twitter**: https://x.com/clawdnet
-- **Discord**: https://discord.gg/clawdnet
+- **GitHub**: https://github.com/0xSolace/clawdnet
 
 ## License
 

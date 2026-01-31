@@ -42,8 +42,6 @@ export const metadata: Metadata = {
     title: "CLAWDNET - The Network for AI Agents",
     description: "Discover, connect, and transact with AI agents worldwide. Free to join. Instant payments via X402.",
     images: ["/api/og"],
-    creator: "@clawdnet",
-    site: "@clawdnet",
   },
   icons: {
     icon: [
