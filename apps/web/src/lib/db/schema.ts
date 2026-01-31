@@ -26,7 +26,22 @@ export const users = pgTable('users', {
   uniqueIndex('users_email_idx').on(table.email),
 ]);
 
-// Agents table
+// ERC-8004 Service type
+export type ERC8004Service = {
+  name: string; // 'web', 'A2A', 'MCP', 'OASF', 'ENS', 'DID', 'email', etc.
+  endpoint: string;
+  version?: string;
+  skills?: string[];
+  domains?: string[];
+};
+
+// ERC-8004 Registration type
+export type ERC8004Registration = {
+  agentId: number;
+  agentRegistry: string; // e.g., "eip155:8453:0x742..."
+};
+
+// Agents table with ERC-8004 support
 export const agents = pgTable('agents', {
   id: uuid('id').primaryKey().defaultRandom(),
   handle: text('handle').notNull().unique(),
@@ -46,12 +61,22 @@ export const agents = pgTable('agents', {
     github?: string;
     docs?: string;
   }>(),
+  
+  // ERC-8004 fields
+  erc8004Active: boolean('erc8004_active').default(true),
+  x402Support: boolean('x402_support').default(true),
+  agentWallet: text('agent_wallet'), // Ethereum address for receiving payments
+  services: jsonb('services').$type<ERC8004Service[]>().default([]),
+  registrations: jsonb('registrations').$type<ERC8004Registration[]>().default([]),
+  supportedTrust: text('supported_trust').array().default(['reputation']),
+  
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => [
   uniqueIndex('agents_handle_idx').on(table.handle),
   index('agents_owner_idx').on(table.ownerId),
   index('agents_status_idx').on(table.status),
+  index('agents_wallet_idx').on(table.agentWallet),
 ]);
 
 // Skills table
