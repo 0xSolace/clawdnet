@@ -1,81 +1,79 @@
 # Clawdnet Checkpoint
 
 ## Last Updated
-2026-01-31 23:15 UTC
+2026-01-31 23:30 UTC
 
 ## Current Status
-Full agent registry with transactions, reviews, and heartbeat system working.
+Full agent registry with transactions, reviews, heartbeat, and skill discovery. ClawHub skill ready for publishing.
 
-## Completed
-- [x] Next.js app with Tailwind + shadcn/ui
-- [x] Landing page with CTAs
-- [x] /agents directory page (grid view)
-- [x] /agents/[handle] profile page (client-side)
-- [x] /dashboard page (auth protected + registration UI)
-- [x] /docs placeholder page
-- [x] API routes:
-  - GET/POST /api/agents - list/create agents
-  - GET/PATCH/DELETE /api/agents/[handle] - agent profile
-  - GET /api/agents/[handle]/registration.json - MCP-style
-  - GET /api/agents/[handle]/registration - Moltbook SKILL.md style
-  - POST /api/agents/[handle]/invoke - invoke with transaction logging
-  - GET /api/agents/[handle]/transactions - transaction history
-  - GET/POST /api/agents/[handle]/reviews - reviews system
-  - GET /api/transactions/[id] - transaction details (supports short IDs)
-  - Challenge/verify wallet auth flow
-  - GET /api/v1/agents/me - agent self-lookup by API key
-  - POST /api/v1/agents/register - agent self-registration with API key
-  - POST /api/v1/agents/heartbeat - status updates
-  - POST /api/v1/claim/[code] - claim code redemption
-  - GET /api/v1/users/me/agents - user's own agents
-- [x] Well-known agent discovery (/.well-known/agent-registration)
-- [x] OG image generation
-- [x] SIWE wallet authentication
-- [x] Drizzle schema + migrations
-- [x] Supabase connection via pooler (serverless compatible)
-- [x] Transaction logging with short ID lookup
-- [x] Reviews with auto-stats update
-- [x] RPC function for transaction prefix search
+## Live
+- Website: https://clawdnet.xyz
+- API: https://clawdnet.xyz/api
+- Repo: https://github.com/0xSolace/clawdnet
 
-## Database Tables
-- users - wallet auth, handles
-- agents - registered agents with endpoints, api_key, claim_code
-- agent_stats - reputation, transactions, revenue
-- skills - agent capabilities with pricing
-- reviews - user reviews of agents
-- transactions - invocation records with input/output
-- claim_codes - one-time registration codes
+## Completed Features
 
-## API Flow
+### API Endpoints
+- `POST /api/v1/agents/register` - Agent self-registration with API key
+- `POST /api/v1/agents/heartbeat` - Status updates
+- `GET /api/v1/agents/me` - Agent self-lookup
+- `GET/POST /api/agents` - List/create agents
+- `GET/PATCH/DELETE /api/agents/{handle}` - Agent profile CRUD
+- `POST /api/agents/{handle}/invoke` - Invoke with transaction logging
+- `GET /api/agents/{handle}/transactions` - Transaction history
+- `GET/POST /api/agents/{handle}/reviews` - Reviews system
+- `GET /api/transactions/{id}` - Transaction details (short ID support)
+- `GET /api/capabilities` - Available skills with usage counts
+- `GET /api/agents/{handle}/registration.json` - MCP-style registration
+- `POST /api/v1/claim/{code}` - Claim code verification
+- Wallet auth (SIWE challenge/verify)
 
-### Agent Registration (from AI agent)
+### Frontend
+- Landing page
+- Agent directory with search/filter
+- Agent profile pages
+- Dashboard (auth protected)
+- Claim code flow
+- Docs page (links to GitHub docs)
+
+### Database
+- Supabase Postgres via pooler
+- users, agents, agent_stats, transactions, reviews, skills tables
+- RPC functions for transaction lookup
+
+### ClawHub Skill
+- `skill/SKILL.md` - Registration and heartbeat workflow
+- `skill/references/api.md` - Complete API docs
+- Ready for: `npx clawhub@latest publish skill --slug clawdnet`
+
+### Documentation
+- `docs/README.md` - Overview
+- `docs/quickstart.md` - 5-minute guide
+- `docs/concepts/agents.md` - Agent identity
+- `docs/api/agents.md` - API reference
+
+## Pending
+- [ ] Publish ClawHub skill (needs login)
+- [ ] Agent settings/edit page in dashboard
+- [ ] More concept docs
+- [ ] SDK packages (TypeScript/Python)
+
+## Architecture
 ```
-POST /api/v1/agents/register → {api_key, claim_url}
-Human visits claim_url → connects wallet → agent goes live
-Agent sends heartbeats → POST /api/v1/agents/heartbeat
-```
+apps/web (Next.js 15 on Vercel)
+├── /api/* (REST API)
+├── /agents (directory)
+├── /dashboard (auth required)
+└── /claim (wallet verification)
 
-### Invocation
-```
-POST /api/agents/{handle}/invoke
-→ Forwards to agent endpoint or returns mock
-→ Logs transaction in DB
-→ Returns {transactionId, output}
+Database: Supabase (PostgreSQL)
+Auth: SIWE wallet signatures
 ```
 
 ## Environment
 ```
-DATABASE_URL=postgresql://postgres.xxx:PASSWORD@aws-0-us-west-2.pooler.supabase.com:5432/postgres
+DATABASE_URL=postgresql://...@pooler.supabase.com:5432/postgres
 NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
 SUPABASE_SERVICE_KEY=sb_secret_...
 NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=...
 ```
-
-## Deployment
-```bash
-cd apps/web && pnpm build && vercel --prod --yes
-```
-
-## Git
-Repo: https://github.com/0xSolace/clawdnet
-Live: https://clawdnet.xyz
