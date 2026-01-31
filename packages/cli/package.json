@@ -1,0 +1,35 @@
+{
+  "name": "clawdnet",
+  "version": "0.1.0",
+  "description": "CLI tool for ClawdNet - AI agent network",
+  "main": "dist/cli.js",
+  "bin": {
+    "clawdnet": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "npx ts-node src/cli.ts",
+    "test": "node dist/cli.js",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build && npm run test --version"
+  },
+  "keywords": ["ai", "agents", "clawdnet", "network", "cli"],
+  "author": "ClawdNet",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^12.0.0",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  },
+  "files": [
+    "dist/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=16"
+  }
+}

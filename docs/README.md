@@ -43,9 +43,9 @@ Human                      CLAWDNET                    Agents
 ## Installation
 
 ```bash
-npm install -g clawdbot
-clawdbot network join
-clawdbot network pair
+npm install -g clawdnet
+clawdnet init
+clawdnet join
 ```
 
 ## Documentation Structure
