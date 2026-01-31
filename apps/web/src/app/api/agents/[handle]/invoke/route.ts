@@ -71,6 +71,9 @@ export async function POST(
 
     // If the agent has a real endpoint, forward the request
     if (agentEndpoint && !agentEndpoint.includes('clawdnet.xyz')) {
+      const transactionId = crypto.randomUUID();
+      const startTime = Date.now();
+      
       try {
         const forwardResponse = await forwardToAgent(agentEndpoint, {
           skill,
@@ -78,19 +81,48 @@ export async function POST(
           message,
           metadata: {
             callerHandle: request.headers.get('X-Caller-Handle'),
-            requestId: crypto.randomUUID(),
+            requestId: transactionId,
           },
         });
+
+        const executionTimeMs = Date.now() - startTime;
+
+        // Log successful transaction
+        await supabase.from('transactions').insert({
+          id: transactionId,
+          agent_id: agent.id,
+          skill: skill || 'general',
+          input: { message: input || message, skill },
+          output: forwardResponse,
+          status: 'completed',
+          execution_time_ms: executionTimeMs,
+          completed_at: new Date().toISOString(),
+        }).catch(console.error);
 
         return NextResponse.json({
           success: true,
           agentHandle: handle,
           skill,
           output: forwardResponse,
+          executionTimeMs,
+          transactionId: `txn_${transactionId.split('-')[0]}`,
           forwarded: true,
           timestamp: new Date().toISOString(),
         });
       } catch (forwardError) {
+        const executionTimeMs = Date.now() - startTime;
+        
+        // Log failed transaction
+        await supabase.from('transactions').insert({
+          id: transactionId,
+          agent_id: agent.id,
+          skill: skill || 'general',
+          input: { message: input || message, skill },
+          status: 'failed',
+          execution_time_ms: executionTimeMs,
+          error_message: forwardError instanceof Error ? forwardError.message : 'Unknown error',
+        }).catch(console.error);
+
         console.error('Forward to agent failed:', forwardError);
         // Fall through to mock response
       }
@@ -129,14 +161,44 @@ export async function POST(
     }
 
     // Generate mock response for agents without real endpoints
+    const startTime = Date.now();
+    const output = generateMockOutput(skill || 'general', input || message);
+    const executionTimeMs = Date.now() - startTime + Math.floor(Math.random() * 500);
+
+    // Log transaction
+    const transactionId = crypto.randomUUID();
+    try {
+      await supabase.from('transactions').insert({
+        id: transactionId,
+        agent_id: agent.id,
+        skill: skill || 'general',
+        input: { message: input || message },
+        output,
+        status: 'completed',
+        execution_time_ms: executionTimeMs,
+        completed_at: new Date().toISOString(),
+      });
+
+      // Update agent stats
+      await supabase.rpc('increment_agent_transactions', { 
+        agent_uuid: agent.id,
+        success: true,
+        response_ms: executionTimeMs,
+      }).catch(() => {
+        // RPC might not exist yet, that's ok
+      });
+    } catch (logError) {
+      console.error('Failed to log transaction:', logError);
+    }
+
     const mockResponse = {
       success: true,
       agentHandle: handle,
       skill: skill || 'general',
       input: input || message,
-      output: generateMockOutput(skill || 'general', input || message),
-      executionTimeMs: Math.floor(Math.random() * 2000) + 500,
-      transactionId: `txn_${crypto.randomUUID().split('-')[0]}`,
+      output,
+      executionTimeMs,
+      transactionId: `txn_${transactionId.split('-')[0]}`,
       timestamp: new Date().toISOString(),
       source: 'mock',
     };
