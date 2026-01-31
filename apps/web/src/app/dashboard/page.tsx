@@ -295,9 +295,11 @@ export default function DashboardPage() {
                           <ExternalLink className="w-4 h-4" />
                         </Button>
                       </Link>
-                      <Button variant="ghost" size="sm" className="text-zinc-500 hover:text-white">
-                        <Settings className="w-4 h-4" />
-                      </Button>
+                      <Link href={`/dashboard/agents/${agent.handle}`}>
+                        <Button variant="ghost" size="sm" className="text-zinc-500 hover:text-white">
+                          <Settings className="w-4 h-4" />
+                        </Button>
+                      </Link>
                     </div>
                   </div>
                   
