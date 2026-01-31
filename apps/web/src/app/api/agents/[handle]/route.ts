@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { eq, desc } from 'drizzle-orm';
-import { getDb, MOCK_AGENTS, getCachedQuery, setCachedQuery, schema } from '@/lib/db';
+import { MOCK_AGENTS, getCachedQuery, setCachedQuery } from '@/lib/db';
+import { supabase } from '@/lib/db/supabase';
 
 export async function GET(
   request: NextRequest,
@@ -16,113 +16,85 @@ export async function GET(
       return NextResponse.json({ ...cached, cached: true });
     }
 
-    // Try DB first
-    const db = getDb();
-    if (db) {
-      try {
-        const queryPromise = (async () => {
-          // Get agent with owner and stats
-          const agentResult = await db
-            .select()
-            .from(schema.agents)
-            .leftJoin(schema.agentStats, eq(schema.agents.id, schema.agentStats.agentId))
-            .leftJoin(schema.users, eq(schema.agents.ownerId, schema.users.id))
-            .where(eq(schema.agents.handle, handle))
-            .limit(1);
+    // Try Supabase first
+    try {
+      const { data: agent, error } = await supabase
+        .from('agents')
+        .select(`
+          *,
+          users!agents_owner_id_fkey (id, handle, name, avatar_url),
+          agent_stats (*),
+          skills (*)
+        `)
+        .eq('handle', handle)
+        .single();
 
-          if (agentResult.length === 0) return null;
+      if (agent && !error) {
+        // Get recent reviews
+        const { data: reviews } = await supabase
+          .from('reviews')
+          .select(`
+            id, rating, content, created_at,
+            users (handle, name)
+          `)
+          .eq('agent_id', agent.id)
+          .order('created_at', { ascending: false })
+          .limit(5);
 
-          const row = agentResult[0];
-          const agentId = row.agents.id;
+        const result = {
+          id: agent.id,
+          handle: agent.handle,
+          name: agent.name,
+          description: agent.description,
+          avatarUrl: agent.avatar_url,
+          endpoint: agent.endpoint,
+          capabilities: agent.capabilities || [],
+          protocols: agent.protocols || ['a2a-v1'],
+          trustLevel: agent.trust_level,
+          isVerified: agent.is_verified,
+          status: agent.status,
+          links: agent.links,
+          createdAt: agent.created_at,
+          updatedAt: agent.updated_at,
+          owner: agent.users ? {
+            id: agent.users.id,
+            handle: agent.users.handle,
+            name: agent.users.name,
+            avatarUrl: agent.users.avatar_url,
+          } : null,
+          stats: agent.agent_stats?.[0] ? {
+            reputationScore: agent.agent_stats[0].reputation_score,
+            totalTransactions: agent.agent_stats[0].total_transactions,
+            successfulTransactions: agent.agent_stats[0].successful_transactions,
+            totalRevenue: agent.agent_stats[0].total_revenue,
+            avgResponseMs: agent.agent_stats[0].avg_response_ms,
+            uptimePercent: agent.agent_stats[0].uptime_percent,
+            reviewsCount: agent.agent_stats[0].reviews_count,
+            avgRating: agent.agent_stats[0].avg_rating,
+          } : null,
+          skills: (agent.skills || []).map((s: any) => ({
+            id: s.id,
+            skillId: s.skill_id,
+            price: s.price,
+            metadata: s.metadata,
+            isActive: s.is_active,
+          })),
+          recentReviews: (reviews || []).map((r: any) => ({
+            id: r.id,
+            rating: r.rating,
+            content: r.content,
+            createdAt: r.created_at,
+            user: r.users,
+          })),
+          source: 'database',
+        };
 
-          // Get skills
-          const skills = await db
-            .select()
-            .from(schema.skills)
-            .where(eq(schema.skills.agentId, agentId));
-
-          // Get recent reviews
-          const reviews = await db
-            .select({
-              id: schema.reviews.id,
-              rating: schema.reviews.rating,
-              content: schema.reviews.content,
-              createdAt: schema.reviews.createdAt,
-              user: {
-                handle: schema.users.handle,
-                name: schema.users.name,
-              },
-            })
-            .from(schema.reviews)
-            .leftJoin(schema.users, eq(schema.reviews.userId, schema.users.id))
-            .where(eq(schema.reviews.agentId, agentId))
-            .orderBy(desc(schema.reviews.createdAt))
-            .limit(5);
-
-          return {
-            id: row.agents.id,
-            handle: row.agents.handle,
-            name: row.agents.name,
-            description: row.agents.description,
-            avatarUrl: row.agents.avatarUrl,
-            endpoint: row.agents.endpoint,
-            capabilities: row.agents.capabilities || [],
-            protocols: row.agents.protocols || ['a2a-v1'],
-            trustLevel: row.agents.trustLevel,
-            isVerified: row.agents.isVerified,
-            status: row.agents.status,
-            links: row.agents.links,
-            createdAt: row.agents.createdAt?.toISOString(),
-            updatedAt: row.agents.updatedAt?.toISOString(),
-            owner: row.users ? {
-              id: row.users.id,
-              handle: row.users.handle,
-              name: row.users.name,
-              avatarUrl: row.users.avatarUrl,
-            } : null,
-            stats: row.agent_stats ? {
-              reputationScore: row.agent_stats.reputationScore,
-              totalTransactions: row.agent_stats.totalTransactions,
-              successfulTransactions: row.agent_stats.successfulTransactions,
-              totalRevenue: row.agent_stats.totalRevenue,
-              avgResponseMs: row.agent_stats.avgResponseMs,
-              uptimePercent: row.agent_stats.uptimePercent,
-              reviewsCount: row.agent_stats.reviewsCount,
-              avgRating: row.agent_stats.avgRating,
-            } : null,
-            skills: skills.map(s => ({
-              id: s.id,
-              skillId: s.skillId,
-              price: s.price,
-              metadata: s.metadata,
-              isActive: s.isActive,
-            })),
-            recentReviews: reviews.map(r => ({
-              id: r.id,
-              rating: r.rating,
-              content: r.content,
-              createdAt: r.createdAt?.toISOString(),
-              user: r.user,
-            })),
-            source: 'database',
-          };
-        })();
-
-        const result = await Promise.race([
-          queryPromise,
-          new Promise<null>((_, reject) =>
-            setTimeout(() => reject(new Error('Query timeout')), 8000)
-          ),
-        ]);
-
-        if (result) {
-          setCachedQuery(cacheKey, result);
-          return NextResponse.json(result);
-        }
-      } catch (dbError) {
-        console.error('DB query failed:', dbError);
-        // Fall through to mock
+        setCachedQuery(cacheKey, result);
+        return NextResponse.json(result);
       }
+    } catch (dbError) {
+      console.error('Supabase query failed:', dbError);
+      // Fall through to mock
     }
 
     // Fallback: Find agent in mock data
@@ -187,30 +159,47 @@ export async function PATCH(
   try {
     const { handle } = await params;
     const body = await request.json();
-    const { name, description, endpoint, capabilities, status, links } = body;
 
-    // In a real implementation, verify ownership here
-    // For now, just return mock response
+    // Try Supabase
+    try {
+      const updates: Record<string, any> = {};
+      if (body.name !== undefined) updates.name = body.name;
+      if (body.description !== undefined) updates.description = body.description;
+      if (body.endpoint !== undefined) updates.endpoint = body.endpoint;
+      if (body.capabilities !== undefined) updates.capabilities = body.capabilities;
+      if (body.status !== undefined) updates.status = body.status;
+      if (body.links !== undefined) updates.links = body.links;
+      updates.updated_at = new Date().toISOString();
 
+      const { data: agent, error } = await supabase
+        .from('agents')
+        .update(updates)
+        .eq('handle', handle)
+        .select()
+        .single();
+
+      if (agent && !error) {
+        return NextResponse.json({
+          ...agent,
+          source: 'database',
+        });
+      }
+    } catch (dbError) {
+      console.error('Supabase update failed:', dbError);
+    }
+
+    // Fallback to mock
     const agent = MOCK_AGENTS.find(a => a.handle === handle);
     if (!agent) {
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
     }
 
-    const updatedAgent = {
+    return NextResponse.json({
       ...agent,
-      name: name ?? agent.name,
-      description: description ?? agent.description,
-      endpoint: endpoint ?? agent.endpoint,
-      capabilities: capabilities ?? agent.capabilities,
-      status: status ?? agent.status,
-      links: links ?? agent.links,
+      ...body,
       updatedAt: new Date().toISOString(),
       source: 'mock',
-      note: 'Updates not persisted without auth',
-    };
-
-    return NextResponse.json(updatedAgent);
+    });
 
   } catch (error) {
     console.error('Error updating agent:', error);
@@ -229,7 +218,21 @@ export async function DELETE(
   try {
     const { handle } = await params;
 
-    // In a real implementation, verify ownership here
+    // Try Supabase
+    try {
+      const { error } = await supabase
+        .from('agents')
+        .delete()
+        .eq('handle', handle);
+
+      if (!error) {
+        return NextResponse.json({ success: true, handle, source: 'database' });
+      }
+    } catch (dbError) {
+      console.error('Supabase delete failed:', dbError);
+    }
+
+    // Fallback
     const agent = MOCK_AGENTS.find(a => a.handle === handle);
     if (!agent) {
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
@@ -239,7 +242,6 @@ export async function DELETE(
       success: true, 
       handle,
       source: 'mock',
-      note: 'Deletion not persisted without auth'
     });
 
   } catch (error) {
