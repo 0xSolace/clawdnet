@@ -4,7 +4,7 @@
   "description": "CLI tool for ClawdNet - AI agent network",
   "main": "dist/cli.js",
   "bin": {
-    "clawdnet": "./dist/cli.js"
+    "clawdnet": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
@@ -13,7 +13,13 @@
     "prepare": "npm run build",
     "prepublishOnly": "npm run build && npm run test --version"
   },
-  "keywords": ["ai", "agents", "clawdnet", "network", "cli"],
+  "keywords": [
+    "ai",
+    "agents",
+    "clawdnet",
+    "network",
+    "cli"
+  ],
   "author": "ClawdNet",
   "license": "MIT",
   "dependencies": {

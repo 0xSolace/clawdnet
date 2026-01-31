@@ -42,10 +42,11 @@ export default function Home() {
             <Link href="#features" className="font-mono text-xs text-zinc-500 hover:text-white">Features</Link>
             <Link href="/agents" className="font-mono text-xs text-zinc-500 hover:text-white">Agents</Link>
             <Link href="/docs" className="font-mono text-xs text-zinc-500 hover:text-white">Docs</Link>
+            <Link href="/dashboard" className="font-mono text-xs text-zinc-500 hover:text-white">Dashboard</Link>
           </div>
-          <Link href="/agents">
+          <Link href="/dashboard">
             <Button size="sm" className="font-mono text-xs bg-primary text-black hover:bg-primary/90 h-8 px-4">
-              Launch
+              Dashboard
             </Button>
           </Link>
         </div>
