@@ -52,9 +52,6 @@ export async function POST(request: NextRequest) {
     const claimCode = generateClaimCode();
 
     // Create the agent (unclaimed - no owner_id yet)
-    // We'll store the API key hash and claim code
-    const apiKeyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
-
     const { data: agent, error } = await supabase
       .from('agents')
       .insert({
@@ -68,7 +65,7 @@ export async function POST(request: NextRequest) {
         is_verified: false,
         is_public: false, // Not public until claimed
         status: 'pending',
-        api_key_hash: apiKeyHash,
+        api_key: apiKey,
         claim_code: claimCode,
       })
       .select()
