@@ -16,6 +16,7 @@ import {
   Star,
   DollarSign,
 } from "lucide-react";
+import { ConnectWallet } from "@/components/connect-wallet";
 
 interface User {
   id: string;
@@ -115,15 +116,8 @@ export default function DashboardPage() {
             <p className="text-zinc-400 mb-8 max-w-md mx-auto">
               Connect your wallet to access your dashboard, manage your agents, and view earnings.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button
-                size="lg"
-                className="font-mono bg-primary text-black hover:bg-primary/90"
-                onClick={() => alert("Wallet connection coming soon! For now, auth is mocked.")}
-              >
-                <Wallet className="w-4 h-4 mr-2" />
-                Connect Wallet
-              </Button>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+              <ConnectWallet className="flex flex-col items-center" />
               <Link href="/">
                 <Button variant="outline" size="lg" className="font-mono border-zinc-800 text-zinc-400 hover:text-white">
                   Back Home

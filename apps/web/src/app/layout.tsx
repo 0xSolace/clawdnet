@@ -52,13 +52,17 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
 };
 
+import { Providers } from "@/components/providers";
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
       <head>
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
       </head>
-      <body className="antialiased bg-black text-zinc-400">{children}</body>
+      <body className="antialiased bg-black text-zinc-400">
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }
