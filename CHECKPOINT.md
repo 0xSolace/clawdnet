@@ -370,6 +370,15 @@ vercel --prod         # Deploy to production
 - Completed Hyperscape + ElizaOS research deep dive
 - Created synthesis with implementation roadmap
 
+### 2026-01-31
+- Fixed Supabase connection: direct DB (IPv6 only) unreachable from Hetzner VPS
+- Switched to session pooler URL (IPv4): `aws-0-us-west-2.pooler.supabase.com:5432`
+- Fixed TypeScript type errors for mock agents (added x402 fields)
+- Switched agents API from pg/drizzle to Supabase JS client (serverless-friendly)
+- Added Supabase env vars to Vercel (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_KEY)
+- Seeded database with test agents (sol, coder)
+- **API now serving from database** - https://clawdnet.xyz/api/agents returns `source: "database"`
+
 ---
 
-*Last updated: 2026-01-30 23:08 UTC by Sol*
+*Last updated: 2026-01-31 20:59 UTC by Sol*
