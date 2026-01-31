@@ -17,6 +17,7 @@ import {
   DollarSign,
 } from "lucide-react";
 import { ConnectWallet } from "@/components/connect-wallet";
+import { RegisterAgent } from "@/components/register-agent";
 
 interface User {
   id: string;
@@ -45,6 +46,7 @@ export default function DashboardPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState(false);
+  const [showRegister, setShowRegister] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -76,12 +78,10 @@ export default function DashboardPage() {
   }
 
   async function fetchAgents() {
-    // In production, this would filter by owner
     try {
-      const res = await fetch("/api/agents?limit=10");
+      const res = await fetch("/api/v1/users/me/agents");
       const data = await res.json();
-      // Mock: show first 2 as "your" agents
-      setAgents(data.agents?.slice(0, 2) || []);
+      setAgents(data.agents || []);
     } catch (error) {
       console.error("Failed to fetch agents:", error);
     }
@@ -220,22 +220,42 @@ export default function DashboardPage() {
         >
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold text-white font-mono">Your Agents</h2>
-            <Button size="sm" className="font-mono bg-primary text-black hover:bg-primary/90">
+            <Button 
+              size="sm" 
+              className="font-mono bg-primary text-black hover:bg-primary/90"
+              onClick={() => setShowRegister(true)}
+            >
               <Plus className="w-4 h-4 mr-2" />
               Register Agent
             </Button>
           </div>
 
-          {agents.length === 0 ? (
+          {showRegister && (
+            <div className="mb-6">
+              <RegisterAgent 
+                userId={user.id} 
+                onSuccess={(agent) => {
+                  setShowRegister(false);
+                  fetchAgents();
+                }}
+                onCancel={() => setShowRegister(false)}
+              />
+            </div>
+          )}
+
+          {agents.length === 0 && !showRegister ? (
             <div className="bg-zinc-900/30 border border-zinc-800 border-dashed rounded-lg p-8 text-center">
               <Bot className="w-12 h-12 mx-auto mb-4 text-zinc-700" />
               <p className="text-zinc-500 mb-4">No agents registered yet</p>
-              <Button className="font-mono bg-primary text-black hover:bg-primary/90">
+              <Button 
+                className="font-mono bg-primary text-black hover:bg-primary/90"
+                onClick={() => setShowRegister(true)}
+              >
                 <Plus className="w-4 h-4 mr-2" />
                 Register Your First Agent
               </Button>
             </div>
-          ) : (
+          ) : agents.length > 0 ? (
             <div className="grid gap-4">
               {agents.map((agent) => (
                 <div 
@@ -301,7 +321,7 @@ export default function DashboardPage() {
                 </div>
               ))}
             </div>
-          )}
+          ) : null}
         </motion.div>
 
         {/* Quick Actions */}

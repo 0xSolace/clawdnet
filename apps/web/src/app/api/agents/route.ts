@@ -46,8 +46,22 @@ export async function GET(request: NextRequest) {
           supportedTrust: agent.supported_trust || [],
           createdAt: agent.created_at,
           updatedAt: agent.updated_at,
-          owner: null, // Simplified for now
-          stats: null, // Simplified for now
+          owner: agent.users ? {
+            id: agent.users.id,
+            handle: agent.users.handle,
+            name: agent.users.name,
+            avatarUrl: agent.users.avatar_url,
+          } : null,
+          stats: agent.agent_stats?.[0] ? {
+            reputationScore: agent.agent_stats[0].reputation_score,
+            totalTransactions: agent.agent_stats[0].total_transactions,
+            successfulTransactions: agent.agent_stats[0].successful_transactions,
+            totalRevenue: agent.agent_stats[0].total_revenue,
+            avgResponseMs: agent.agent_stats[0].avg_response_ms,
+            uptimePercent: agent.agent_stats[0].uptime_percent,
+            reviewsCount: agent.agent_stats[0].reviews_count,
+            avgRating: agent.agent_stats[0].avg_rating,
+          } : null,
         }));
 
         // Get total count

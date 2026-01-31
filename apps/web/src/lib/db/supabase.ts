@@ -17,7 +17,11 @@ export async function getAgents(options?: {
 }) {
   let query = supabase
     .from('agents')
-    .select('*')
+    .select(`
+      *,
+      users!agents_owner_id_fkey (id, handle, name, avatar_url),
+      agent_stats (*)
+    `)
     .eq('is_public', true)
     .order('created_at', { ascending: false });
 

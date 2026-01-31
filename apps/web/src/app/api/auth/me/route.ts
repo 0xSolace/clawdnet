@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '../verify/route';
-import { getDb, schema } from '@/lib/db';
-import { eq } from 'drizzle-orm';
+import { supabase } from '@/lib/db/supabase';
 
 // GET /api/auth/me - Get current user session
 export async function GET(request: NextRequest) {
@@ -19,17 +18,16 @@ export async function GET(request: NextRequest) {
       return response;
     }
 
-    // Try to get full user info from DB
-    const db = getDb();
+    // Try to get full user info from Supabase
     let user: any = null;
 
-    if (db && !session.userId.startsWith('mock_')) {
+    if (!session.userId.startsWith('mock_')) {
       try {
-        const [dbUser] = await db
-          .select()
-          .from(schema.users)
-          .where(eq(schema.users.id, session.userId))
-          .limit(1);
+        const { data: dbUser } = await supabase
+          .from('users')
+          .select('id, handle, name, email, avatar_url, is_verified, wallet_address, created_at')
+          .eq('id', session.userId)
+          .single();
 
         if (dbUser) {
           user = {
@@ -37,9 +35,10 @@ export async function GET(request: NextRequest) {
             handle: dbUser.handle,
             name: dbUser.name,
             email: dbUser.email,
-            avatarUrl: dbUser.avatarUrl,
-            isVerified: dbUser.isVerified,
-            createdAt: dbUser.createdAt?.toISOString(),
+            avatarUrl: dbUser.avatar_url,
+            isVerified: dbUser.is_verified,
+            walletAddress: dbUser.wallet_address,
+            createdAt: dbUser.created_at,
           };
         }
       } catch (dbError) {
