@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyMessage } from 'viem';
 import { getChallenge, clearChallenge } from '../challenge/route';
 import { getDb, schema } from '@/lib/db';
 import { eq } from 'drizzle-orm';
@@ -38,13 +39,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // In production, verify the signature using viem/ethers
-    // For now, we'll trust the signature (mock verification)
-    // TODO: Implement proper signature verification:
-    // import { verifyMessage } from 'viem';
-    // const isValid = await verifyMessage({ address, message, signature });
+    // Verify the signature using viem
+    let isValid = false;
+    try {
+      isValid = await verifyMessage({
+        address: address as `0x${string}`,
+        message,
+        signature: signature as `0x${string}`,
+      });
+    } catch (verifyError) {
+      console.error('Signature verification error:', verifyError);
+      return NextResponse.json(
+        { error: 'Invalid signature format' },
+        { status: 401 }
+      );
+    }
 
-    console.log('Signature verification (mock):', { address, signature: signature.slice(0, 20) + '...' });
+    if (!isValid) {
+      return NextResponse.json(
+        { error: 'Signature verification failed' },
+        { status: 401 }
+      );
+    }
+
+    console.log('Signature verified successfully:', { address, signature: signature.slice(0, 20) + '...' });
 
     // Clear the used challenge
     clearChallenge(address);

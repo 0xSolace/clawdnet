@@ -1,5 +1,5 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { Pool } from 'pg';
+import { Pool } from '@neondatabase/serverless';
 import * as schema from './schema';
 
 // Simple in-memory cache with TTL
@@ -28,7 +28,7 @@ export function setCachedQuery(key: string, data: any): void {
   }
 }
 
-// Lazy pool initialization
+// Lazy pool initialization - uses Neon serverless driver
 let pool: Pool | null = null;
 let poolError: string | null = null;
 
@@ -36,13 +36,14 @@ function getPool(): Pool | null {
   if (poolError) return null;
   if (!pool && process.env.DATABASE_URL) {
     try {
+      // Neon serverless pool with optimized settings
       pool = new Pool({
         connectionString: process.env.DATABASE_URL,
-        max: 3, // Keep pool small for serverless
-        idleTimeoutMillis: 10000,
-        connectionTimeoutMillis: 5000, // 5 second connection timeout
+        max: 5, // Neon handles connection pooling well
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 10000, // 10 second connection timeout
       });
-      pool.on('error', (err) => {
+      pool.on('error', (err: Error) => {
         console.error('Pool error:', err);
         poolError = err.message;
         pool = null;
@@ -113,13 +114,13 @@ export const MOCK_AGENTS = [
     protocols: ['a2a-v1', 'erc-8004'],
     trustLevel: 'directory',
     isVerified: true,
-    status: 'online' ,
+    status: 'online' as const,
     links: { website: 'https://clawdnet.xyz', github: 'https://github.com/0xSolace' },
     // ERC-8004 fields
     erc8004Active: true,
     x402Support: true,
     agentWallet: '0x0000000000000000000000000000000000000001', // Placeholder
-    supportedTrust: ['reputation'] ,
+    supportedTrust: ['reputation'] as string[],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     owner: { id: '0', handle: 'shadow', name: 'Shadow', avatarUrl: null },
@@ -145,12 +146,12 @@ export const MOCK_AGENTS = [
     protocols: ['a2a-v1', 'erc-8004'],
     trustLevel: 'directory',
     isVerified: false,
-    status: 'online' ,
+    status: 'online' as const,
     links: null,
     erc8004Active: true,
     x402Support: true,
     agentWallet: '0x0000000000000000000000000000000000000002',
-    supportedTrust: ['reputation'] ,
+    supportedTrust: ['reputation'] as string[],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     owner: { id: '0', handle: 'system', name: 'System', avatarUrl: null },
@@ -176,12 +177,12 @@ export const MOCK_AGENTS = [
     protocols: ['a2a-v1', 'erc-8004'],
     trustLevel: 'directory',
     isVerified: true,
-    status: 'busy' ,
+    status: 'busy' as const,
     links: null,
     erc8004Active: true,
     x402Support: true,
     agentWallet: '0x0000000000000000000000000000000000000003',
-    supportedTrust: ['reputation'] ,
+    supportedTrust: ['reputation'] as string[],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     owner: { id: '0', handle: 'system', name: 'System', avatarUrl: null },
@@ -207,12 +208,12 @@ export const MOCK_AGENTS = [
     protocols: ['a2a-v1', 'erc-8004'],
     trustLevel: 'directory',
     isVerified: false,
-    status: 'offline' ,
+    status: 'offline' as const,
     links: null,
     erc8004Active: false,
     x402Support: true,
     agentWallet: '0x0000000000000000000000000000000000000004',
-    supportedTrust: ['reputation'] ,
+    supportedTrust: ['reputation'] as string[],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     owner: { id: '0', handle: 'system', name: 'System', avatarUrl: null },
@@ -238,12 +239,12 @@ export const MOCK_AGENTS = [
     protocols: ['a2a-v1', 'erc-8004', 'mcp'],
     trustLevel: 'directory',
     isVerified: true,
-    status: 'online' ,
+    status: 'online' as const,
     links: null,
     erc8004Active: true,
     x402Support: true,
     agentWallet: '0x0000000000000000000000000000000000000005',
-    supportedTrust: ['reputation'] ,
+    supportedTrust: ['reputation'] as string[],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     owner: { id: '0', handle: 'system', name: 'System', avatarUrl: null },
@@ -269,12 +270,12 @@ export const MOCK_AGENTS = [
     protocols: ['a2a-v1', 'erc-8004'],
     trustLevel: 'directory',
     isVerified: true,
-    status: 'online' ,
+    status: 'online' as const,
     links: null,
     erc8004Active: true,
     x402Support: true,
     agentWallet: '0x0000000000000000000000000000000000000006',
-    supportedTrust: ['reputation'] ,
+    supportedTrust: ['reputation'] as string[],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     owner: { id: '0', handle: 'system', name: 'System', avatarUrl: null },
