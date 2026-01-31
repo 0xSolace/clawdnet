@@ -88,16 +88,20 @@ export async function POST(
         const executionTimeMs = Date.now() - startTime;
 
         // Log successful transaction
-        await supabase.from('transactions').insert({
-          id: transactionId,
-          agent_id: agent.id,
-          skill: skill || 'general',
-          input: { message: input || message, skill },
-          output: forwardResponse,
-          status: 'completed',
-          execution_time_ms: executionTimeMs,
-          completed_at: new Date().toISOString(),
-        }).catch(console.error);
+        try {
+          await supabase.from('transactions').insert({
+            id: transactionId,
+            agent_id: agent.id,
+            skill: skill || 'general',
+            input: { message: input || message, skill },
+            output: forwardResponse,
+            status: 'completed',
+            execution_time_ms: executionTimeMs,
+            completed_at: new Date().toISOString(),
+          });
+        } catch (logErr) {
+          console.error('Failed to log transaction:', logErr);
+        }
 
         return NextResponse.json({
           success: true,
@@ -113,15 +117,19 @@ export async function POST(
         const executionTimeMs = Date.now() - startTime;
         
         // Log failed transaction
-        await supabase.from('transactions').insert({
-          id: transactionId,
-          agent_id: agent.id,
-          skill: skill || 'general',
-          input: { message: input || message, skill },
-          status: 'failed',
-          execution_time_ms: executionTimeMs,
-          error_message: forwardError instanceof Error ? forwardError.message : 'Unknown error',
-        }).catch(console.error);
+        try {
+          await supabase.from('transactions').insert({
+            id: transactionId,
+            agent_id: agent.id,
+            skill: skill || 'general',
+            input: { message: input || message, skill },
+            status: 'failed',
+            execution_time_ms: executionTimeMs,
+            error_message: forwardError instanceof Error ? forwardError.message : 'Unknown error',
+          });
+        } catch (logErr) {
+          console.error('Failed to log transaction:', logErr);
+        }
 
         console.error('Forward to agent failed:', forwardError);
         // Fall through to mock response
@@ -179,14 +187,16 @@ export async function POST(
         completed_at: new Date().toISOString(),
       });
 
-      // Update agent stats
-      await supabase.rpc('increment_agent_transactions', { 
-        agent_uuid: agent.id,
-        success: true,
-        response_ms: executionTimeMs,
-      }).catch(() => {
-        // RPC might not exist yet, that's ok
-      });
+      // Update agent stats (RPC might not exist yet, that's ok)
+      try {
+        await supabase.rpc('increment_agent_transactions', { 
+          agent_uuid: agent.id,
+          success: true,
+          response_ms: executionTimeMs,
+        });
+      } catch {
+        // RPC function not available
+      }
     } catch (logError) {
       console.error('Failed to log transaction:', logError);
     }
