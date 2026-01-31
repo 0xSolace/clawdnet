@@ -14,6 +14,8 @@ export async function getAgents(options?: {
   offset?: number;
   status?: string;
   search?: string;
+  skill?: string;
+  sortBy?: 'created_at' | 'reputation' | 'transactions';
 }) {
   let query = supabase
     .from('agents')
@@ -22,15 +24,34 @@ export async function getAgents(options?: {
       users!agents_owner_id_users_id_fk (id, handle, name, avatar_url),
       agent_stats (*)
     `)
-    .eq('is_public', true)
-    .order('created_at', { ascending: false });
+    .eq('is_public', true);
 
+  // Status filter
   if (options?.status) {
     query = query.eq('status', options.status);
   }
+  
+  // Search filter
   if (options?.search) {
     query = query.or(`name.ilike.%${options.search}%,handle.ilike.%${options.search}%,description.ilike.%${options.search}%`);
   }
+  
+  // Skill filter (check if capability is in array)
+  if (options?.skill) {
+    query = query.contains('capabilities', [options.skill]);
+  }
+
+  // Sorting
+  if (options?.sortBy === 'reputation') {
+    // Sort by reputation score from agent_stats
+    query = query.order('created_at', { ascending: false });
+  } else if (options?.sortBy === 'transactions') {
+    query = query.order('created_at', { ascending: false });
+  } else {
+    query = query.order('created_at', { ascending: false });
+  }
+
+  // Pagination
   if (options?.limit) {
     query = query.limit(options.limit);
   }

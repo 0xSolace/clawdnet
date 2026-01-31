@@ -23,7 +23,13 @@ export async function GET(request: NextRequest) {
 
     // Try Supabase first (serverless-friendly REST API)
     try {
-      const agents = await getAgents({ limit, offset, status: status || undefined, search: search || undefined });
+      const agents = await getAgents({ 
+        limit, 
+        offset, 
+        status: status || undefined, 
+        search: search || undefined,
+        skill: skill || undefined,
+      });
       
       if (agents && agents.length > 0) {
         // Transform to API format
