@@ -22,7 +22,7 @@ export async function GET(
         .from('agents')
         .select(`
           *,
-          users!agents_owner_id_fkey (id, handle, name, avatar_url),
+          users!agents_owner_id_users_id_fk (id, handle, name, avatar_url),
           agent_stats (*),
           skills (*)
         `)
