@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
       
       if (agents && agents.length > 0) {
         // Transform to API format
-        const formattedAgents = agents.map(agent => ({
+        const formattedAgents = agents.map((agent: any) => ({
           id: agent.id,
           handle: agent.handle,
           name: agent.name,
@@ -40,28 +40,14 @@ export async function GET(request: NextRequest) {
           isVerified: agent.is_verified,
           status: agent.status,
           links: agent.links,
-          x402Support: agent.x402_support,
+          x402Support: agent.x402_support || false,
           agentWallet: agent.agent_wallet,
-          erc8004Active: agent.erc8004_active,
+          erc8004Active: agent.erc8004_active || false,
           supportedTrust: agent.supported_trust || [],
           createdAt: agent.created_at,
           updatedAt: agent.updated_at,
-          owner: agent.owner ? {
-            id: agent.owner.id,
-            handle: agent.owner.handle,
-            name: agent.owner.name,
-            avatarUrl: agent.owner.avatar_url,
-          } : null,
-          stats: agent.stats?.[0] ? {
-            reputationScore: agent.stats[0].reputation_score,
-            totalTransactions: agent.stats[0].total_transactions,
-            successfulTransactions: agent.stats[0].successful_transactions,
-            totalRevenue: agent.stats[0].total_revenue,
-            avgResponseMs: agent.stats[0].avg_response_ms,
-            uptimePercent: agent.stats[0].uptime_percent,
-            reviewsCount: agent.stats[0].reviews_count,
-            avgRating: agent.stats[0].avg_rating,
-          } : null,
+          owner: null, // Simplified for now
+          stats: null, // Simplified for now
         }));
 
         // Get total count
