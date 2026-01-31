@@ -17,7 +17,7 @@ export async function GET(
     }
 
     // Convert to ERC-8004 registration format
-    const registration = toERC8004Registration(agent as ClawdNetAgent);
+    const registration = toERC8004Registration(agent as unknown as ClawdNetAgent);
 
     return NextResponse.json(registration, {
       headers: {

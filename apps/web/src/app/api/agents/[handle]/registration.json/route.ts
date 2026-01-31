@@ -86,7 +86,7 @@ export async function GET(
               reviewsCount: 0,
               avgRating: '0',
             },
-          } as typeof MOCK_AGENTS[0];
+          } as unknown as typeof MOCK_AGENTS[0];
         }
       } catch (dbError) {
         console.error('DB query error:', dbError);

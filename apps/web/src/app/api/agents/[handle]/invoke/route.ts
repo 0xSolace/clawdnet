@@ -126,7 +126,7 @@ export async function POST(
             avatarUrl: dbAgent.avatarUrl ?? null,
             protocols: (dbAgent.protocols as string[]) || [],
             trustLevel: (dbAgent.trustLevel as 'directory' | 'onchain' | 'tee' | 'custom') || 'directory',
-            links: (dbAgent.links as Record<string, string>) ?? null,
+            links: (dbAgent.links as Record<string, string> | null) || null,
             erc8004Active: dbAgent.erc8004Active || false,
             supportedTrust: (dbAgent.supportedTrust as string[]) || [],
             createdAt: dbAgent.createdAt?.toISOString() || new Date().toISOString(),
@@ -142,7 +142,7 @@ export async function POST(
               reviewsCount: 0,
               avgRating: '0',
             },
-          } as typeof MOCK_AGENTS[0];
+          } as unknown as typeof MOCK_AGENTS[0];
         }
       } catch (dbError) {
         console.error('DB query error:', dbError);
