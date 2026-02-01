@@ -147,21 +147,19 @@ export async function POST(
     }
 
     // Check if x402 payment is required and not provided
-    if (paymentConfig.x402Enabled && !paymentHeader && !payment) {
+    if (paymentConfig.x402Support && !paymentHeader && !payment) {
       // Create 402 response with payment requirements
       const requirements = createPaymentRequirements({
-        receiverWallet: paymentConfig.walletAddress!,
+        payTo: paymentConfig.agentWallet!,
         amountUsd: skillPrice,
         description: `Invoke ${skill || 'agent'} on ${agent.name}`,
-        skillId: skill,
-        agentHandle: handle,
       });
       
       return create402Response(requirements);
     }
 
     // Verify x402 payment if header provided
-    if (paymentHeader && paymentConfig.x402Enabled) {
+    if (paymentHeader && paymentConfig.x402Support) {
       const verification = await verifyPayment(request);
       
       if (!verification.valid) {

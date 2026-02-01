@@ -23,7 +23,7 @@ const RECEIVER_WALLET = process.env.X402_RECEIVER_WALLET || '0x00000000000000000
  * GET /api/x402-example
  * A simple protected endpoint that returns a message after payment
  */
-async function handler(request: NextRequest): Promise<Response> {
+async function handler(request: NextRequest): Promise<NextResponse> {
   // If we get here, payment was verified by the middleware
   // The actual handler logic goes here
   
@@ -38,7 +38,7 @@ async function handler(request: NextRequest): Promise<Response> {
 // Wrap with x402 payment protection
 // This will return 402 if no valid payment, or call handler if payment verified
 export const GET = withPaymentRequired(handler, {
-  receiverWallet: RECEIVER_WALLET,
+  payTo: RECEIVER_WALLET,
   amountUsd: 0.01, // $0.01 USDC
   description: 'Example API access fee',
 });

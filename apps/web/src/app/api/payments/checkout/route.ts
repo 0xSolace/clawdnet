@@ -63,15 +63,14 @@ export async function POST(req: NextRequest) {
     // Get payment config
     const paymentConfig = getAgentPaymentConfig(agent);
     
-    if (!paymentConfig.stripeEnabled) {
+    if (!paymentConfig.stripeOnboardingComplete) {
       // If no Stripe, check for x402
-      if (paymentConfig.x402Enabled) {
+      if (paymentConfig.x402Support) {
         // Return x402 payment info instead
         const requirements = createPaymentRequirements({
-          receiverWallet: paymentConfig.walletAddress!,
+          payTo: paymentConfig.agentWallet!,
           amountUsd: amount,
           description: description || `Payment to @${agent.handle}`,
-          agentHandle: agent.handle,
         });
         
         return NextResponse.json({
@@ -79,7 +78,7 @@ export async function POST(req: NextRequest) {
           message: 'This agent accepts crypto payments via x402',
           x402: {
             available: true,
-            walletAddress: paymentConfig.walletAddress,
+            walletAddress: paymentConfig.agentWallet,
             network: 'base',
             asset: 'USDC',
             requirements,
@@ -141,10 +140,10 @@ export async function POST(req: NextRequest) {
       paymentId: payment.id,
     };
     
-    if (paymentConfig.x402Enabled) {
+    if (paymentConfig.x402Support) {
       response.x402Alternative = {
         available: true,
-        walletAddress: paymentConfig.walletAddress,
+        walletAddress: paymentConfig.agentWallet,
         network: 'base',
         asset: 'USDC',
         endpoint: '/api/payments/x402',

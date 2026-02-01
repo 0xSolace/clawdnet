@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase, createPayment } from '@/lib/db/db';
+import { supabase } from '@/lib/db/db';
 import { cookies } from 'next/headers';
 import * as jose from 'jose';
 import {
@@ -88,9 +88,9 @@ async function handlePaymentRequest(req: NextRequest) {
   // Check x402 support
   const paymentConfig = getAgentPaymentConfig(agent);
   
-  if (!paymentConfig.x402Enabled) {
+  if (!paymentConfig.x402Support || !paymentConfig.agentWallet) {
     // Fallback info for Stripe
-    if (paymentConfig.stripeEnabled) {
+    if (paymentConfig.stripeOnboardingComplete) {
       return NextResponse.json({
         error: 'x402 not available',
         message: 'This agent only accepts Stripe payments',
@@ -110,42 +110,56 @@ async function handlePaymentRequest(req: NextRequest) {
   const netAmount = amount - platformFee;
 
   // Create payment record in pending state
-  const payment = await createPayment({
-    fromUserId: user?.userId,
-    toAgentId: agent.id,
-    paymentType,
-    amount: amount.toString(),
-    currency: 'USDC',
-    description: description || `x402 payment to @${agent.handle}`,
-    platformFee: platformFee.toString(),
-    netAmount: netAmount.toString(),
-    metadata: { 
-      skillId,
-      protocol: 'x402',
-      network: 'base',
-    },
-  });
+  const { data: payment, error: paymentError } = await supabase
+    .from('payments')
+    .insert({
+      from_user_id: user?.userId,
+      to_agent_id: agent.id,
+      payment_type: paymentType,
+      amount: amount.toString(),
+      currency: 'USDC',
+      status: 'pending',
+      description: description || `x402 payment to @${agent.handle}`,
+      platform_fee: platformFee.toString(),
+      net_amount: netAmount.toString(),
+      metadata: { 
+        skillId,
+        protocol: 'x402',
+        network: 'base',
+      },
+    })
+    .select()
+    .single();
+
+  if (paymentError) {
+    console.error('Failed to create payment record:', paymentError);
+    // Continue anyway - payment tracking is best-effort
+  }
 
   // Create x402 payment requirements
   const requirements = createPaymentRequirements({
-    receiverWallet: agent.agent_wallet!,
+    payTo: paymentConfig.agentWallet,
     amountUsd: amount,
     description: description || `Payment to @${agent.handle}`,
-    skillId,
-    agentHandle: agent.handle,
   });
 
-  // Add payment ID to metadata for tracking
-  const enhancedRequirements = {
-    ...requirements,
-    metadata: {
-      ...requirements.metadata,
-      clawdnetPaymentId: payment.id,
-    },
-  };
-
   // Return 402 with payment requirements
-  return create402Response(enhancedRequirements);
+  return new Response(
+    JSON.stringify({
+      error: 'Payment Required',
+      message: requirements.description,
+      paymentRequirements: [requirements],
+      x402Version: 2,
+      paymentId: payment?.id,
+    }),
+    {
+      status: 402,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Payment-Requirements': JSON.stringify([requirements]),
+      },
+    }
+  );
 }
 
 async function handlePaymentVerification(req: NextRequest, paymentHeader: string) {
@@ -227,12 +241,11 @@ export async function GET(req: NextRequest) {
     agentHandle: agent.handle,
     agentName: agent.name,
     paymentMethods: {
-      x402: paymentConfig.x402Enabled,
-      stripe: paymentConfig.stripeEnabled,
-      preferred: paymentConfig.preferredMethod,
+      x402: paymentConfig.x402Support && !!paymentConfig.agentWallet,
+      stripe: paymentConfig.stripeOnboardingComplete,
     },
-    x402: paymentConfig.x402Enabled ? {
-      walletAddress: paymentConfig.walletAddress,
+    x402: (paymentConfig.x402Support && paymentConfig.agentWallet) ? {
+      walletAddress: paymentConfig.agentWallet,
       network: 'base',
       asset: 'USDC',
     } : null,

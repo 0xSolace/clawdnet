@@ -103,7 +103,7 @@ export function ClaimIdentityButton({
         abi: IDENTITY_REGISTRY_ABI,
         functionName: 'newAgent',
         args: [claimInfo.domain, address],
-        chainId: claimInfo.chainId,
+        chainId: claimInfo.chainId as 1 | 8453 | 84532,
       });
       
       setStatus('pending');

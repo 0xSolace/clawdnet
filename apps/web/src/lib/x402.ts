@@ -7,16 +7,14 @@
  * @see https://github.com/coinbase/x402
  */
 
-import { x402ResourceServer, HTTPFacilitatorClient } from '@x402/core/server';
-import { ExactEvmScheme } from '@x402/evm';
-import { withX402 } from '@x402/next';
-import { createPublicClient, createWalletClient, http, parseUnits, formatUnits } from 'viem';
+import { createPublicClient, createWalletClient, http, formatUnits } from 'viem';
 import { base } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
-import type { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 // Base USDC contract address
-export const BASE_USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+export const BASE_USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const;
 
 // Coinbase x402 facilitator URL
 export const X402_FACILITATOR_URL = process.env.X402_FACILITATOR_URL || 'https://x402.coinbase.com';
@@ -28,7 +26,10 @@ export const X402_PLATFORM_FEE_PERCENT = 5;
 export const X402_PLATFORM_WALLET = process.env.X402_PLATFORM_WALLET || '0x0000000000000000000000000000000000000000';
 
 // Network identifier for Base
-export const X402_NETWORK = 'base';
+export const X402_NETWORK = 'base:8453' as const;
+
+// USDC has 6 decimals
+const USDC_DECIMALS = 6;
 
 // ============================================================================
 // Viem Clients
@@ -55,151 +56,82 @@ export function createAgentWalletClient(privateKey: string) {
 }
 
 // ============================================================================
-// x402 Server Setup
-// ============================================================================
-
-let _resourceServer: x402ResourceServer | null = null;
-let _facilitatorClient: HTTPFacilitatorClient | null = null;
-
-/**
- * Get or create the x402 resource server
- */
-export function getX402ResourceServer(): x402ResourceServer {
-  if (!_resourceServer) {
-    _facilitatorClient = new HTTPFacilitatorClient(X402_FACILITATOR_URL);
-    _resourceServer = new x402ResourceServer(_facilitatorClient);
-    
-    // Register EVM scheme for Base
-    const evmScheme = new ExactEvmScheme();
-    _resourceServer.register(X402_NETWORK, evmScheme);
-  }
-  return _resourceServer;
-}
-
-/**
- * Get the facilitator client
- */
-export function getFacilitatorClient(): HTTPFacilitatorClient {
-  if (!_facilitatorClient) {
-    getX402ResourceServer(); // Initialize
-  }
-  return _facilitatorClient!;
-}
-
-// ============================================================================
 // Payment Requirements
 // ============================================================================
 
 export interface X402PaymentRequirement {
   network: string;
-  asset: string;
-  amount: string; // In smallest unit (e.g., USDC has 6 decimals)
-  receiver: string;
-  description?: string;
-  metadata?: Record<string, unknown>;
-}
-
-/**
- * Create x402 payment requirements for an agent skill
- */
-export function createPaymentRequirements(params: {
-  receiverWallet: string;
-  amountUsd: number;
-  description?: string;
-  skillId?: string;
-  agentHandle?: string;
-}): X402PaymentRequirement {
-  const { receiverWallet, amountUsd, description, skillId, agentHandle } = params;
-  
-  // Convert USD to USDC (6 decimals)
-  const amountUsdc = parseUnits(amountUsd.toString(), 6).toString();
-  
-  return {
-    network: X402_NETWORK,
-    asset: BASE_USDC_ADDRESS,
-    amount: amountUsdc,
-    receiver: receiverWallet,
-    description: description || `Payment to ${agentHandle || 'agent'}`,
-    metadata: {
-      skillId,
-      agentHandle,
-      timestamp: Date.now(),
-    },
-  };
-}
-
-/**
- * Create a 402 response with payment requirements
- */
-export function create402Response(requirements: X402PaymentRequirement): Response {
-  const paymentDetails = {
-    x402Version: 1,
-    accepts: [
-      {
-        scheme: 'exact',
-        network: requirements.network,
-        maxAmountRequired: requirements.amount,
-        resource: requirements.receiver,
-        description: requirements.description,
-        mimeType: 'application/json',
-        payTo: requirements.receiver,
-        maxTimeoutSeconds: 3600,
-        asset: requirements.asset,
-        extra: requirements.metadata,
-      },
-    ],
-  };
-
-  return new Response(JSON.stringify({
-    error: 'Payment Required',
-    message: requirements.description,
-    paymentDetails,
-  }), {
-    status: 402,
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Payment-Details': JSON.stringify(paymentDetails),
-      'WWW-Authenticate': `X-Payment realm="ClawdNet", version="1"`,
-    },
-  });
-}
-
-// ============================================================================
-// Route Configuration for x402
-// ============================================================================
-
-export interface X402RouteConfig {
-  network: string;
-  asset: string;
-  payTo: string;
+  scheme: string;
   maxAmountRequired: string;
-  description?: string;
+  resource: string;
+  description: string;
+  mimeType: string;
+  payTo: string;
+  maxTimeoutSeconds: number;
+  asset: string;
 }
 
 /**
- * Create route configuration for x402 middleware
+ * Create payment requirements for x402 response
  */
-export function createRouteConfig(params: {
-  receiverWallet: string;
+export function createPaymentRequirements(options: {
   amountUsd: number;
-  description?: string;
-}): X402RouteConfig {
-  const amountUsdc = parseUnits(params.amountUsd.toString(), 6).toString();
+  payTo: string;
+  description: string;
+  resource?: string;
+}): X402PaymentRequirement {
+  // Convert USD amount to USDC (6 decimals)
+  const amountUsdc = Math.floor(options.amountUsd * Math.pow(10, USDC_DECIMALS)).toString();
   
   return {
     network: X402_NETWORK,
-    asset: BASE_USDC_ADDRESS,
-    payTo: params.receiverWallet,
+    scheme: 'exact',
     maxAmountRequired: amountUsdc,
-    description: params.description,
+    resource: options.resource || options.payTo,
+    description: options.description,
+    mimeType: 'application/json',
+    payTo: options.payTo,
+    maxTimeoutSeconds: 3600,
+    asset: `eip155:8453/erc20:${BASE_USDC_ADDRESS}`,
   };
+}
+
+/**
+ * Create a 402 Payment Required response
+ */
+export function create402Response(requirements: X402PaymentRequirement, message?: string): Response {
+  return new Response(
+    JSON.stringify({
+      error: 'Payment Required',
+      message: message || 'This resource requires payment',
+      paymentRequirements: [requirements],
+      x402Version: 2,
+    }),
+    {
+      status: 402,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Payment-Requirements': JSON.stringify([requirements]),
+      },
+    }
+  );
 }
 
 // ============================================================================
 // Payment Verification
 // ============================================================================
 
-export interface X402VerifyResult {
+export interface X402PaymentPayload {
+  x402Version: number;
+  scheme: string;
+  network: string;
+  payload: unknown;
+  payer: string;
+  amount: string;
+  requirements: X402PaymentRequirement[];
+}
+
+export interface VerifyResult {
   valid: boolean;
   payer?: string;
   amount?: string;
@@ -208,35 +140,39 @@ export interface X402VerifyResult {
 }
 
 /**
- * Verify an x402 payment signature from request headers
+ * Verify an x402 payment from request headers
  */
-export async function verifyPayment(request: NextRequest): Promise<X402VerifyResult> {
-  const paymentHeader = request.headers.get('X-Payment') || request.headers.get('payment-signature');
-  
-  if (!paymentHeader) {
-    return { valid: false, error: 'No payment header found' };
-  }
-
+export async function verifyPayment(request: NextRequest): Promise<VerifyResult> {
   try {
-    // Parse the payment payload
-    const paymentPayload = JSON.parse(paymentHeader);
+    const paymentHeader = request.headers.get('X-Payment');
+    if (!paymentHeader) {
+      return { valid: false, error: 'No payment header found' };
+    }
+
+    const paymentPayload: X402PaymentPayload = JSON.parse(paymentHeader);
     
-    // Get the resource server
-    const server = getX402ResourceServer();
-    
-    // Verify the payment using the facilitator
-    const facilitator = getFacilitatorClient();
-    const result = await facilitator.verify({
-      paymentPayload,
-      paymentRequirements: paymentPayload.requirements,
+    // Verify with Coinbase facilitator
+    const response = await fetch(`${X402_FACILITATOR_URL}/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        paymentPayload,
+        paymentRequirements: paymentPayload.requirements,
+      }),
     });
 
-    if (result.valid) {
+    if (!response.ok) {
+      return { valid: false, error: `Facilitator error: ${response.status}` };
+    }
+
+    const result = await response.json();
+    
+    if (result.isValid) {
       return {
         valid: true,
         payer: paymentPayload.payer,
         amount: paymentPayload.amount,
-        txHash: result.settlementDetails?.txHash,
+        txHash: result.txHash,
       };
     }
 
@@ -254,76 +190,83 @@ export async function verifyPayment(request: NextRequest): Promise<X402VerifyRes
 // On-Chain Balance & History
 // ============================================================================
 
-const USDC_ABI = [
+const erc20Abi = [
   {
     name: 'balanceOf',
     type: 'function',
     stateMutability: 'view',
     inputs: [{ name: 'account', type: 'address' }],
-    outputs: [{ name: 'balance', type: 'uint256' }],
+    outputs: [{ name: '', type: 'uint256' }],
   },
   {
     name: 'Transfer',
     type: 'event',
     inputs: [
-      { indexed: true, name: 'from', type: 'address' },
-      { indexed: true, name: 'to', type: 'address' },
-      { indexed: false, name: 'value', type: 'uint256' },
+      { name: 'from', type: 'address', indexed: true },
+      { name: 'to', type: 'address', indexed: true },
+      { name: 'value', type: 'uint256', indexed: false },
     ],
   },
 ] as const;
 
 /**
- * Get USDC balance for a wallet on Base
+ * Get USDC balance for an address on Base
  */
-export async function getUsdcBalance(walletAddress: string): Promise<number> {
+export async function getUsdcBalance(address: string): Promise<{
+  balance: string;
+  balanceFormatted: string;
+}> {
   try {
     const balance = await basePublicClient.readContract({
-      address: BASE_USDC_ADDRESS as `0x${string}`,
-      abi: USDC_ABI,
+      address: BASE_USDC_ADDRESS,
+      abi: erc20Abi,
       functionName: 'balanceOf',
-      args: [walletAddress as `0x${string}`],
+      args: [address as `0x${string}`],
     });
-    
-    // USDC has 6 decimals
-    return parseFloat(formatUnits(balance, 6));
+
+    return {
+      balance: balance.toString(),
+      balanceFormatted: formatUnits(balance, USDC_DECIMALS),
+    };
   } catch (error) {
-    console.error('Failed to get USDC balance:', error);
-    return 0;
+    console.error('Error fetching USDC balance:', error);
+    return { balance: '0', balanceFormatted: '0' };
   }
 }
 
-/**
- * Get recent USDC transfer events to a wallet
- */
-export async function getRecentTransfers(
-  walletAddress: string, 
-  limit = 20
-): Promise<{
+export interface TransferEvent {
   from: string;
   to: string;
-  amount: number;
-  txHash: string;
+  value: string;
+  valueFormatted: string;
+  transactionHash: string;
   blockNumber: bigint;
-}[]> {
+}
+
+/**
+ * Get recent USDC transfers to an address
+ */
+export async function getRecentTransfers(
+  address: string,
+  limit: number = 10
+): Promise<TransferEvent[]> {
   try {
-    // Get recent blocks (last ~1000 blocks ≈ 30 minutes on Base)
     const currentBlock = await basePublicClient.getBlockNumber();
-    const fromBlock = currentBlock - BigInt(1000);
-    
+    const fromBlock = currentBlock - BigInt(10000); // ~10k blocks back
+
     const logs = await basePublicClient.getLogs({
-      address: BASE_USDC_ADDRESS as `0x${string}`,
+      address: BASE_USDC_ADDRESS,
       event: {
         type: 'event',
         name: 'Transfer',
         inputs: [
-          { indexed: true, name: 'from', type: 'address' },
-          { indexed: true, name: 'to', type: 'address' },
-          { indexed: false, name: 'value', type: 'uint256' },
+          { name: 'from', type: 'address', indexed: true },
+          { name: 'to', type: 'address', indexed: true },
+          { name: 'value', type: 'uint256', indexed: false },
         ],
       },
       args: {
-        to: walletAddress as `0x${string}`,
+        to: address as `0x${string}`,
       },
       fromBlock,
       toBlock: currentBlock,
@@ -335,69 +278,82 @@ export async function getRecentTransfers(
       .map((log) => ({
         from: log.args.from as string,
         to: log.args.to as string,
-        amount: parseFloat(formatUnits(log.args.value as bigint, 6)),
-        txHash: log.transactionHash,
+        value: (log.args.value as bigint).toString(),
+        valueFormatted: formatUnits(log.args.value as bigint, USDC_DECIMALS),
+        transactionHash: log.transactionHash,
         blockNumber: log.blockNumber,
       }));
   } catch (error) {
-    console.error('Failed to get recent transfers:', error);
+    console.error('Error fetching transfer events:', error);
     return [];
   }
 }
 
 // ============================================================================
-// Middleware Wrapper
+// Middleware
 // ============================================================================
 
-export type X402HandlerOptions = {
-  receiverWallet: string;
+interface PaymentRequiredOptions {
   amountUsd: number;
-  description?: string;
-};
+  payTo: string;
+  description: string;
+}
 
 /**
- * Wrap a Next.js API route handler with x402 payment protection
- * 
- * @example
- * ```ts
- * export const POST = withPaymentRequired(
- *   async (req) => {
- *     // Handler only runs after payment verified
- *     return NextResponse.json({ result: 'success' });
- *   },
- *   {
- *     receiverWallet: '0x...',
- *     amountUsd: 0.01,
- *     description: 'API call fee'
- *   }
- * );
- * ```
+ * Create a route config for x402 protected routes
+ */
+function createRouteConfig(options: PaymentRequiredOptions) {
+  return {
+    network: X402_NETWORK,
+    payTo: options.payTo,
+    description: options.description,
+    maxAmountRequired: Math.floor(options.amountUsd * Math.pow(10, USDC_DECIMALS)).toString(),
+    asset: `eip155:8453/erc20:${BASE_USDC_ADDRESS}`,
+  };
+}
+
+/**
+ * Middleware wrapper for x402 protected routes
+ * Checks for valid payment and returns 402 if not present
  */
 export function withPaymentRequired(
-  handler: (request: NextRequest) => Promise<Response>,
-  options: X402HandlerOptions
-) {
-  const routeConfig = createRouteConfig(options);
-  const server = getX402ResourceServer();
-  
-  return withX402(
-    handler,
-    {
-      scheme: 'exact',
-      network: routeConfig.network,
-      maxAmountRequired: routeConfig.maxAmountRequired,
-      resource: routeConfig.payTo,
-      description: routeConfig.description,
-      mimeType: 'application/json',
-      payTo: routeConfig.payTo,
-      maxTimeoutSeconds: 3600,
-      asset: routeConfig.asset,
-    },
-    server,
-    undefined, // paywallConfig
-    undefined, // paywall provider
-    true // syncFacilitatorOnStart
-  );
+  handler: (request: NextRequest) => Promise<NextResponse>,
+  options: PaymentRequiredOptions
+): (request: NextRequest) => Promise<NextResponse> {
+  return async (request: NextRequest) => {
+    // Check for payment header
+    const hasPayment = request.headers.has('X-Payment');
+    
+    if (!hasPayment) {
+      const requirements = createPaymentRequirements(options);
+      return NextResponse.json(
+        {
+          error: 'Payment Required',
+          message: options.description,
+          paymentRequirements: [requirements],
+          x402Version: 2,
+        },
+        { 
+          status: 402,
+          headers: {
+            'X-Payment-Requirements': JSON.stringify([requirements]),
+          },
+        }
+      );
+    }
+
+    // Verify payment
+    const verification = await verifyPayment(request);
+    if (!verification.valid) {
+      return NextResponse.json(
+        { error: 'Payment Invalid', message: verification.error },
+        { status: 402 }
+      );
+    }
+
+    // Payment valid - proceed with handler
+    return handler(request);
+  };
 }
 
 // ============================================================================
@@ -407,81 +363,42 @@ export function withPaymentRequired(
 /**
  * Create x402 requirements with dynamic pricing based on skill
  */
-export async function createDynamicPaymentRequirements(params: {
-  agentWallet: string;
-  skillId: string;
-  basePrice: number;
-  inputTokens?: number;
-  outputTokens?: number;
-}): Promise<X402PaymentRequirement> {
-  const { agentWallet, skillId, basePrice, inputTokens = 0, outputTokens = 0 } = params;
-  
-  // Simple pricing: base + token costs
-  const inputCost = inputTokens * 0.000001; // $0.001 per 1000 input tokens
-  const outputCost = outputTokens * 0.000002; // $0.002 per 1000 output tokens
-  const totalPrice = basePrice + inputCost + outputCost;
-  
+export function createDynamicPricing(skill: {
+  name: string;
+  rate: number;
+  unit: string;
+}, payTo: string): X402PaymentRequirement {
   return createPaymentRequirements({
-    receiverWallet: agentWallet,
-    amountUsd: totalPrice,
-    description: `${skillId} service`,
-    skillId,
+    amountUsd: skill.rate,
+    payTo,
+    description: `${skill.name} - ${skill.rate} ${skill.unit}`,
   });
 }
 
 // ============================================================================
-// Helper Types
+// Agent Payment Config
 // ============================================================================
 
-export type PaymentMethod = 'x402' | 'stripe' | 'both';
-
 export interface AgentPaymentConfig {
-  x402Enabled: boolean;
-  stripeEnabled: boolean;
-  preferredMethod: PaymentMethod;
-  walletAddress?: string;
-  stripeAccountId?: string;
+  x402Support: boolean;
+  agentWallet: string | null;
+  stripeAccountId: string | null;
+  stripeOnboardingComplete: boolean;
 }
 
 /**
- * Get payment configuration for an agent
+ * Check if agent has x402 payments enabled
  */
 export function getAgentPaymentConfig(agent: {
-  x402Support?: boolean;
-  agentWallet?: string | null;
-  stripeAccountId?: string | null;
-  stripeOnboardingComplete?: boolean;
+  x402_support?: boolean;
+  agent_wallet?: string | null;
+  stripe_account_id?: string | null;
+  stripe_onboarding_complete?: boolean;
 }): AgentPaymentConfig {
-  const x402Enabled = !!(agent.x402Support && agent.agentWallet);
-  const stripeEnabled = !!(agent.stripeAccountId && agent.stripeOnboardingComplete);
-  
-  let preferredMethod: PaymentMethod = 'stripe';
-  if (x402Enabled && stripeEnabled) {
-    preferredMethod = 'both';
-  } else if (x402Enabled) {
-    preferredMethod = 'x402';
-  }
-  
   return {
-    x402Enabled,
-    stripeEnabled,
-    preferredMethod,
-    walletAddress: agent.agentWallet || undefined,
-    stripeAccountId: agent.stripeAccountId || undefined,
+    x402Support: agent.x402_support ?? false,
+    agentWallet: agent.agent_wallet ?? null,
+    stripeAccountId: agent.stripe_account_id ?? null,
+    stripeOnboardingComplete: agent.stripe_onboarding_complete ?? false,
   };
 }
-
-export default {
-  getX402ResourceServer,
-  getFacilitatorClient,
-  createPaymentRequirements,
-  create402Response,
-  verifyPayment,
-  getUsdcBalance,
-  getRecentTransfers,
-  withPaymentRequired,
-  createDynamicPaymentRequirements,
-  getAgentPaymentConfig,
-  BASE_USDC_ADDRESS,
-  X402_NETWORK,
-};

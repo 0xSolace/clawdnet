@@ -274,7 +274,7 @@ export async function resolveAgentByDomain(
     
     const [id, resolvedDomain, address] = result as [bigint, string, Address];
     
-    if (id === 0n) return null;
+    if (id === BigInt(0)) return null;
     
     return { agentId: id, domain: resolvedDomain, address };
   } catch (error) {
@@ -305,7 +305,7 @@ export async function resolveAgentByAddress(
     
     const [id, domain, address] = result as [bigint, string, Address];
     
-    if (id === 0n) return null;
+    if (id === BigInt(0)) return null;
     
     return { agentId: id, domain, address };
   } catch (error) {

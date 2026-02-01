@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
     const paymentConfig = getAgentPaymentConfig(agent);
 
     // If no x402 wallet, return empty balance
-    if (!paymentConfig.x402Enabled || !paymentConfig.walletAddress) {
+    if (!paymentConfig.x402Support || !paymentConfig.agentWallet) {
       return NextResponse.json({
         agentHandle: agent.handle,
         x402Enabled: false,
@@ -67,19 +67,20 @@ export async function GET(req: NextRequest) {
     }
 
     // Get on-chain USDC balance
-    const usdcBalance = await getUsdcBalance(paymentConfig.walletAddress);
+    const usdcBalance = await getUsdcBalance(paymentConfig.agentWallet);
 
     // Get recent transfers if requested
-    let transfers: {
+    let transfers: Array<{
       from: string;
       to: string;
-      amount: number;
-      txHash: string;
+      value: string;
+      valueFormatted: string;
+      transactionHash: string;
       blockNumber: bigint;
-    }[] = [];
+    }> = [];
     
     if (includeTransfers) {
-      transfers = await getRecentTransfers(paymentConfig.walletAddress, 20);
+      transfers = await getRecentTransfers(paymentConfig.agentWallet, 20);
     }
 
     // Get database payment totals
@@ -101,13 +102,13 @@ export async function GET(req: NextRequest) {
       agentHandle: agent.handle,
       x402Enabled: true,
       wallet: {
-        address: paymentConfig.walletAddress,
+        address: paymentConfig.agentWallet,
         network: 'base',
         asset: 'USDC',
       },
       balance: {
-        usdc: usdcBalance,
-        formatted: `$${usdcBalance.toFixed(2)}`,
+        usdc: usdcBalance.balance,
+        formatted: `$${usdcBalance.balanceFormatted}`,
       },
       stats: {
         totalReceived: totalReceived,
@@ -117,9 +118,9 @@ export async function GET(req: NextRequest) {
       transfers: transfers.map(t => ({
         from: t.from,
         to: t.to,
-        amount: t.amount,
-        txHash: t.txHash,
-        explorerUrl: `https://basescan.org/tx/${t.txHash}`,
+        amount: t.valueFormatted,
+        txHash: t.transactionHash,
+        explorerUrl: `https://basescan.org/tx/${t.transactionHash}`,
       })),
     });
   } catch (error) {

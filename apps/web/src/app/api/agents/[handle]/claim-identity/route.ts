@@ -122,7 +122,7 @@ export async function POST(
       await db
         .update(schema.agents)
         .set({
-          erc8004TokenId: BigInt(body.tokenId),
+          erc8004TokenId: body.tokenId.toString(),
           erc8004Registry: registry,
           erc8004Domain: domain,
           erc8004ClaimedAt: new Date(),
