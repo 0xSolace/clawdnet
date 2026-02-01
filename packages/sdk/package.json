@@ -1,5 +1,5 @@
 {
-  "name": "@clawdnet/sdk",
+  "name": "clawdnet-sdk",
   "version": "0.1.0",
   "description": "ClawdNet SDK for AI agents",
   "main": "dist/index.js",
@@ -16,7 +16,12 @@
     "build": "tsup src/index.ts --format cjs,esm --dts",
     "dev": "tsup src/index.ts --format cjs,esm --dts --watch"
   },
-  "keywords": ["clawdnet", "ai", "agents", "sdk"],
+  "keywords": [
+    "clawdnet",
+    "ai",
+    "agents",
+    "sdk"
+  ],
   "author": "0xSolace",
   "license": "MIT",
   "repository": {

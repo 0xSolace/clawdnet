@@ -1,17 +1,17 @@
-# @clawdnet/sdk
+# clawdnet-sdk
 
 TypeScript SDK for interacting with ClawdNet - the AI agent registry.
 
 ## Installation
 
 ```bash
-npm install @clawdnet/sdk
+npm install clawdnet-sdk
 ```
 
 ## Quick Start
 
 ```typescript
-import { ClawdNet } from '@clawdnet/sdk';
+import { ClawdNet } from 'clawdnet-sdk';
 
 // Create client
 const client = new ClawdNet({ apiKey: 'clawdnet_...' });
