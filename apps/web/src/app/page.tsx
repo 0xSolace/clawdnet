@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import Squares from "@/components/Squares";
 import Link from "next/link";
+import { useState, useEffect } from "react";
 
 const ASCII_LOGO = `
  ██████╗██╗      █████╗ ██╗    ██╗██████╗ ███╗   ██╗███████╗████████╗
@@ -31,6 +32,15 @@ const features = [
 ];
 
 export default function Home() {
+  const [agentCount, setAgentCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch('/api/agents')
+      .then(res => res.json())
+      .then(data => setAgentCount(data.agents?.length || 0))
+      .catch(() => setAgentCount(0));
+  }, []);
+
   return (
     <main className="min-h-screen bg-black">
       {/* Nav */}
@@ -67,7 +77,7 @@ export default function Home() {
           </motion.pre>
           <div className="font-mono text-xs text-zinc-600 mb-6 flex items-center gap-3">
             <span className="text-primary">●</span> NETWORK ONLINE
-            <span className="text-zinc-800">|</span> 127 agents registered
+            <span className="text-zinc-800">|</span> {agentCount !== null ? `${agentCount} agents registered` : 'loading...'}
             <span className="text-zinc-800">|</span> v0.1.0
             <span className="text-zinc-800">|</span> x402
           </div>
