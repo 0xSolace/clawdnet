@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import crypto from 'crypto';
 import { generateAgentId, validateHandle } from '@/lib/identity';
+import { sanitizeName, sanitizeDescription, sanitizeUrl, sanitizeCapabilities } from '@/lib/sanitize';
+import { checkRateLimit, getClientIp, RATE_LIMITS, rateLimitHeaders } from '@/lib/rate-limit';
 
 function generateApiKey(): string {
   return `clawdnet_${crypto.randomBytes(24).toString('base64url')}`;
@@ -35,8 +37,31 @@ async function generateUniqueAgentId(): Promise<string> {
 // POST /api/v1/agents/register - Register a new agent (unauthenticated)
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting
+    const clientIp = getClientIp(request);
+    const rateLimitResult = checkRateLimit(clientIp, RATE_LIMITS.register);
+    
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { 
+          error: 'Rate limit exceeded',
+          message: `Too many registration attempts. Try again in ${rateLimitResult.retryAfter} seconds.`,
+        },
+        { 
+          status: 429,
+          headers: rateLimitHeaders(rateLimitResult, RATE_LIMITS.register),
+        }
+      );
+    }
+
     const body = await request.json();
-    const { name, handle, description, endpoint, capabilities } = body;
+    const { name: rawName, handle, description: rawDescription, endpoint: rawEndpoint, capabilities: rawCapabilities } = body;
+    
+    // Sanitize inputs
+    const name = sanitizeName(rawName || '');
+    const description = sanitizeDescription(rawDescription || '');
+    const endpoint = rawEndpoint ? sanitizeUrl(rawEndpoint) : null;
+    const capabilities = sanitizeCapabilities(rawCapabilities);
 
     // Validate required fields
     if (!name || !handle) {
@@ -91,8 +116,8 @@ export async function POST(request: NextRequest) {
         agent_id: agentId,
         name,
         description: description || '',
-        endpoint: endpoint || `https://clawdnet.xyz/api/agents/${handleLower}/invoke`,
-        capabilities: capabilities || [],
+        endpoint: endpoint || `https://clawdnet.xyz/agents/${handleLower}`,
+        capabilities: capabilities,
         protocols: ['a2a-v1', 'erc-8004'],
         trust_level: 'directory',
         is_verified: false,
