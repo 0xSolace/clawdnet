@@ -1,6 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { MOCK_AGENTS, getCachedQuery, setCachedQuery } from '@/lib/db';
 import { supabase } from '@/lib/db/supabase';
+import { sanitizeName, sanitizeDescription, sanitizeUrl, sanitizeCapabilities } from '@/lib/sanitize';
+
+/**
+ * Authenticate agent API request
+ * Returns the agent if auth succeeds, null otherwise
+ */
+async function authenticateAgent(request: NextRequest, handle: string) {
+  const authHeader = request.headers.get('Authorization');
+  
+  if (!authHeader?.startsWith('Bearer ')) {
+    return null;
+  }
+  
+  const apiKey = authHeader.slice(7);
+  
+  if (!apiKey || !apiKey.startsWith('clawdnet_')) {
+    return null;
+  }
+  
+  // Verify API key matches the agent
+  const { data: agent, error } = await supabase
+    .from('agents')
+    .select('*')
+    .eq('handle', handle)
+    .eq('api_key', apiKey)
+    .single();
+  
+  if (error || !agent) {
+    return null;
+  }
+  
+  return agent;
+}
 
 export async function GET(
   request: NextRequest,
@@ -156,54 +189,73 @@ export async function GET(
   }
 }
 
-// PATCH /api/agents/[handle] - Update agent
+// PATCH /api/agents/[handle] - Update agent (REQUIRES AUTH)
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ handle: string }> }
 ) {
   try {
     const { handle } = await params;
+    
+    // AUTHENTICATION REQUIRED
+    const authenticatedAgent = await authenticateAgent(request, handle);
+    if (!authenticatedAgent) {
+      return NextResponse.json(
+        { error: 'Unauthorized', message: 'Valid API key required in Authorization header' },
+        { status: 401 }
+      );
+    }
+    
     const body = await request.json();
 
-    // Try Supabase
-    try {
-      const updates: Record<string, any> = {};
-      if (body.name !== undefined) updates.name = body.name;
-      if (body.description !== undefined) updates.description = body.description;
-      if (body.endpoint !== undefined) updates.endpoint = body.endpoint;
-      if (body.capabilities !== undefined) updates.capabilities = body.capabilities;
-      if (body.status !== undefined) updates.status = body.status;
-      if (body.links !== undefined) updates.links = body.links;
-      updates.updated_at = new Date().toISOString();
-
-      const { data: agent, error } = await supabase
-        .from('agents')
-        .update(updates)
-        .eq('handle', handle)
-        .select()
-        .single();
-
-      if (agent && !error) {
-        return NextResponse.json({
-          ...agent,
-          source: 'database',
-        });
-      }
-    } catch (dbError) {
-      console.error('Supabase update failed:', dbError);
+    // Sanitize inputs
+    const updates: Record<string, any> = {};
+    if (body.name !== undefined) updates.name = sanitizeName(body.name);
+    if (body.description !== undefined) updates.description = sanitizeDescription(body.description);
+    if (body.endpoint !== undefined) {
+      const sanitizedEndpoint = sanitizeUrl(body.endpoint);
+      if (sanitizedEndpoint) updates.endpoint = sanitizedEndpoint;
     }
+    if (body.capabilities !== undefined) updates.capabilities = sanitizeCapabilities(body.capabilities);
+    if (body.status !== undefined && ['online', 'offline', 'busy'].includes(body.status)) {
+      updates.status = body.status;
+    }
+    if (body.links !== undefined && typeof body.links === 'object') {
+      // Sanitize links
+      const links: Record<string, string> = {};
+      for (const [key, value] of Object.entries(body.links)) {
+        if (typeof value === 'string') {
+          const sanitizedUrl = sanitizeUrl(value);
+          if (sanitizedUrl) links[key] = sanitizedUrl;
+        }
+      }
+      updates.links = links;
+    }
+    updates.updated_at = new Date().toISOString();
 
-    // Fallback to mock
-    const agent = MOCK_AGENTS.find(a => a.handle === handle);
-    if (!agent) {
-      return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
+    const { data: agent, error } = await supabase
+      .from('agents')
+      .update(updates)
+      .eq('handle', handle)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Supabase update failed:', error);
+      return NextResponse.json({ error: 'Failed to update agent' }, { status: 500 });
     }
 
     return NextResponse.json({
-      ...agent,
-      ...body,
-      updatedAt: new Date().toISOString(),
-      source: 'mock',
+      id: agent.id,
+      handle: agent.handle,
+      name: agent.name,
+      description: agent.description,
+      endpoint: agent.endpoint,
+      capabilities: agent.capabilities,
+      status: agent.status,
+      links: agent.links,
+      updatedAt: agent.updated_at,
+      source: 'database',
     });
 
   } catch (error) {
@@ -215,7 +267,7 @@ export async function PATCH(
   }
 }
 
-// DELETE /api/agents/[handle] - Delete agent
+// DELETE /api/agents/[handle] - Delete agent (REQUIRES AUTH)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ handle: string }> }
@@ -223,30 +275,29 @@ export async function DELETE(
   try {
     const { handle } = await params;
 
-    // Try Supabase
-    try {
-      const { error } = await supabase
-        .from('agents')
-        .delete()
-        .eq('handle', handle);
-
-      if (!error) {
-        return NextResponse.json({ success: true, handle, source: 'database' });
-      }
-    } catch (dbError) {
-      console.error('Supabase delete failed:', dbError);
+    // AUTHENTICATION REQUIRED
+    const authenticatedAgent = await authenticateAgent(request, handle);
+    if (!authenticatedAgent) {
+      return NextResponse.json(
+        { error: 'Unauthorized', message: 'Valid API key required in Authorization header' },
+        { status: 401 }
+      );
     }
 
-    // Fallback
-    const agent = MOCK_AGENTS.find(a => a.handle === handle);
-    if (!agent) {
-      return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
+    const { error } = await supabase
+      .from('agents')
+      .delete()
+      .eq('handle', handle);
+
+    if (error) {
+      console.error('Supabase delete failed:', error);
+      return NextResponse.json({ error: 'Failed to delete agent' }, { status: 500 });
     }
 
     return NextResponse.json({ 
       success: true, 
       handle,
-      source: 'mock',
+      message: 'Agent deleted successfully',
     });
 
   } catch (error) {
