@@ -4,8 +4,9 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { AlertCircle, ArrowLeft } from 'lucide-react';
+import { Suspense } from 'react';
 
-export default function ClaimErrorPage() {
+function ClaimErrorContent() {
   const searchParams = useSearchParams();
   const error = searchParams.get('error') || 'An unknown error occurred';
 
@@ -47,5 +48,17 @@ export default function ClaimErrorPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function ClaimErrorPage() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen bg-black flex items-center justify-center p-6">
+        <div className="text-zinc-500 font-mono">Loading...</div>
+      </main>
+    }>
+      <ClaimErrorContent />
+    </Suspense>
   );
 }
