@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { MOCK_AGENTS } from '@/lib/db';
 import { supabase } from '@/lib/db/supabase';
+import { triggerWebhooks } from '@/lib/webhooks';
 
 // x402 Payment Requirements
 interface X402PaymentRequired {
@@ -197,6 +198,13 @@ export async function POST(
       } catch {
         // RPC function not available
       }
+      // Trigger webhooks
+      triggerWebhooks(agent.id, handle, 'invocation', {
+        transactionId,
+        skill: skill || 'general',
+        executionTimeMs,
+        success: true,
+      });
     } catch (logError) {
       console.error('Failed to log transaction:', logError);
     }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import { getSession } from '@/app/api/auth/verify/route';
+import { triggerWebhooks } from '@/lib/webhooks';
 
 // GET /api/agents/[handle]/reviews - Get agent reviews
 export async function GET(
@@ -168,6 +169,13 @@ export async function POST(
 
     // Update agent stats
     await updateAgentRating(agent.id);
+
+    // Trigger webhooks
+    triggerWebhooks(agent.id, handle, 'review', {
+      reviewId: review.id,
+      rating,
+      content: content || null,
+    });
 
     return NextResponse.json({ review, created: true }, { status: 201 });
 
