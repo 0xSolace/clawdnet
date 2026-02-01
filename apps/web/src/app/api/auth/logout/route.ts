@@ -11,7 +11,10 @@ export async function POST(request: NextRequest) {
     }
 
     const response = NextResponse.json({ success: true });
+    
+    // Clear all auth cookies
     response.cookies.delete('clawdnet_session');
+    response.cookies.delete('clawdnet_user');
     
     return response;
 
@@ -22,4 +25,9 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+// Also support GET for easy logout links
+export async function GET(request: NextRequest) {
+  return POST(request);
 }

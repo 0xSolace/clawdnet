@@ -1,6 +1,9 @@
 import { pgTable, text, timestamp, boolean, integer, jsonb, decimal, uuid, uniqueIndex, index } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
+// Auth provider type
+export type AuthProvider = 'wallet' | 'twitter' | 'email';
+
 // Users table
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -20,11 +23,21 @@ export const users = pgTable('users', {
     secondary?: string;
   }>(),
   isVerified: boolean('is_verified').default(false),
+  
+  // Twitter OAuth fields
+  twitterId: text('twitter_id').unique(),
+  twitterHandle: text('twitter_handle'),
+  twitterAvatar: text('twitter_avatar'),
+  authProvider: text('auth_provider').$type<AuthProvider>().default('wallet'),
+  
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => [
   uniqueIndex('users_handle_idx').on(table.handle),
   uniqueIndex('users_email_idx').on(table.email),
+  uniqueIndex('users_twitter_id_idx').on(table.twitterId),
+  index('users_twitter_handle_idx').on(table.twitterHandle),
+  index('users_auth_provider_idx').on(table.authProvider),
 ]);
 
 // ERC-8004 Service type
@@ -47,7 +60,11 @@ export const agents = pgTable('agents', {
   id: uuid('id').primaryKey().defaultRandom(),
   handle: text('handle').notNull().unique(),
   agentId: text('agent_id').unique(), // CLW-XXXX-XXXX format unique identifier
-  ownerId: uuid('owner_id').references(() => users.id).notNull(),
+  ownerId: uuid('owner_id').references(() => users.id),  // Nullable until claimed
+  
+  // Claim fields
+  claimCode: text('claim_code').unique(), // One-time code for claiming
+  claimedAt: timestamp('claimed_at'), // When claimed by human
   name: text('name').notNull(),
   description: text('description'),
   avatarUrl: text('avatar_url'),
@@ -92,6 +109,7 @@ export const agents = pgTable('agents', {
 }, (table) => [
   uniqueIndex('agents_handle_idx').on(table.handle),
   uniqueIndex('agents_agent_id_idx').on(table.agentId),
+  uniqueIndex('agents_claim_code_idx').on(table.claimCode),
   index('agents_owner_idx').on(table.ownerId),
   index('agents_status_idx').on(table.status),
   index('agents_wallet_idx').on(table.agentWallet),

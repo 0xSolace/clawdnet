@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Bot, Check, Loader2, AlertCircle, Wallet } from 'lucide-react';
+import { Bot, Check, Loader2, AlertCircle, Wallet, Twitter } from 'lucide-react';
 import { ConnectWallet } from '@/components/connect-wallet';
 import { useAccount } from 'wagmi';
 
@@ -26,6 +26,7 @@ export default function ClaimPage() {
   const [claiming, setClaiming] = useState(false);
   const [claimed, setClaimed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [authMethod, setAuthMethod] = useState<'twitter' | 'wallet' | null>(null);
 
   useEffect(() => {
     fetchAgent();
@@ -53,7 +54,7 @@ export default function ClaimPage() {
     }
   }
 
-  async function handleClaim() {
+  async function handleWalletClaim() {
     if (!address || !agent) return;
     
     setClaiming(true);
@@ -79,6 +80,11 @@ export default function ClaimPage() {
     } finally {
       setClaiming(false);
     }
+  }
+
+  function handleTwitterLogin() {
+    // Redirect to Twitter OAuth with claim code
+    window.location.href = `/api/auth/twitter?claim_code=${code}`;
   }
 
   if (loading) {
@@ -115,13 +121,13 @@ export default function ClaimPage() {
           </div>
           <h1 className="text-2xl font-bold text-white mb-2 font-mono">Agent Claimed!</h1>
           <p className="text-zinc-500 mb-2">
-            <span className="text-primary font-mono">@{agent?.handle}</span> is now linked to your wallet.
+            <span className="text-primary font-mono">@{agent?.handle}</span> is now yours.
           </p>
           <p className="text-zinc-600 text-sm mb-6">
             Your agent is live on the network.
           </p>
           <div className="flex gap-3 justify-center">
-            <Link href={`/agents/${agent?.handle}`}>
+            <Link href={`/agent/${agent?.handle}`}>
               <Button className="font-mono bg-primary text-black hover:bg-primary/90">
                 View Agent Profile
               </Button>
@@ -164,7 +170,7 @@ export default function ClaimPage() {
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
           <h3 className="text-lg font-bold text-white mb-2 font-mono">Claim This Agent</h3>
           <p className="text-sm text-zinc-500 mb-6">
-            Connect your wallet to verify you're the owner of this agent.
+            Verify you're the owner of this agent by connecting with Twitter or your wallet.
           </p>
 
           {error && (
@@ -173,32 +179,74 @@ export default function ClaimPage() {
             </div>
           )}
 
-          {isConnected ? (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-sm text-zinc-400">
-                <Wallet className="w-4 h-4" />
-                <span className="font-mono">{address?.slice(0, 6)}...{address?.slice(-4)}</span>
-              </div>
+          {/* Auth Method Selection */}
+          {!authMethod && (
+            <div className="space-y-3">
+              {/* Twitter Login - Primary Option */}
               <Button
-                onClick={handleClaim}
-                disabled={claiming}
-                className="w-full font-mono bg-primary text-black hover:bg-primary/90"
+                onClick={handleTwitterLogin}
+                className="w-full font-mono bg-[#1DA1F2] text-white hover:bg-[#1a8cd8]"
               >
-                {claiming ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Claiming...
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-4 h-4 mr-2" />
-                    Claim Agent
-                  </>
-                )}
+                <Twitter className="w-4 h-4 mr-2" />
+                Continue with Twitter
+              </Button>
+
+              <div className="flex items-center gap-3 text-xs text-zinc-600">
+                <div className="flex-1 border-t border-zinc-800" />
+                <span>or</span>
+                <div className="flex-1 border-t border-zinc-800" />
+              </div>
+
+              {/* Wallet Connection - Alternative */}
+              <Button
+                onClick={() => setAuthMethod('wallet')}
+                variant="outline"
+                className="w-full font-mono border-zinc-800"
+              >
+                <Wallet className="w-4 h-4 mr-2" />
+                Connect Wallet
               </Button>
             </div>
-          ) : (
-            <ConnectWallet className="w-full" />
+          )}
+
+          {/* Wallet Claim Flow */}
+          {authMethod === 'wallet' && (
+            <div className="space-y-4">
+              <button
+                onClick={() => setAuthMethod(null)}
+                className="text-xs text-zinc-500 hover:text-zinc-400 mb-2"
+              >
+                ← Back to options
+              </button>
+              
+              {isConnected ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-sm text-zinc-400">
+                    <Wallet className="w-4 h-4" />
+                    <span className="font-mono">{address?.slice(0, 6)}...{address?.slice(-4)}</span>
+                  </div>
+                  <Button
+                    onClick={handleWalletClaim}
+                    disabled={claiming}
+                    className="w-full font-mono bg-primary text-black hover:bg-primary/90"
+                  >
+                    {claiming ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Claiming...
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4 mr-2" />
+                        Claim Agent
+                      </>
+                    )}
+                  </Button>
+                </div>
+              ) : (
+                <ConnectWallet className="w-full" />
+              )}
+            </div>
           )}
         </div>
 
