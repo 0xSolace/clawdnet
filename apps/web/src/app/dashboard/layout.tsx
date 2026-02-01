@@ -20,6 +20,8 @@ import {
   ChevronRight,
   Zap,
   DollarSign,
+  Twitter,
+  ArrowLeft,
 } from "lucide-react";
 
 interface User {
@@ -28,6 +30,7 @@ interface User {
   name?: string;
   avatarUrl?: string;
   address?: string;
+  twitterHandle?: string;
 }
 
 const navigation = [
@@ -49,6 +52,7 @@ export default function DashboardLayout({
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [authMethod, setAuthMethod] = useState<"choice" | "wallet">("choice");
 
   useEffect(() => {
     checkAuth();
@@ -82,6 +86,10 @@ export default function DashboardLayout({
     window.location.href = "/";
   }
 
+  function handleTwitterLogin() {
+    window.location.href = "/api/auth/twitter?redirect_to=/dashboard";
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -96,7 +104,19 @@ export default function DashboardLayout({
   if (authError || !user) {
     return (
       <div className="min-h-screen bg-black">
-        <div className="max-w-lg mx-auto px-6 py-20">
+        {/* Simple nav for auth page */}
+        <nav className="border-b border-zinc-900 bg-black">
+          <div className="max-w-lg mx-auto px-6 h-14 flex items-center justify-between">
+            <Link href="/" className="flex items-center gap-2 text-zinc-500 hover:text-white transition-colors">
+              <ArrowLeft className="w-4 h-4" />
+              <span className="font-mono text-sm">Back</span>
+            </Link>
+            <Link href="/" className="font-mono text-sm font-bold text-white">CLAWDNET</Link>
+            <div className="w-16" /> {/* Spacer for centering */}
+          </div>
+        </nav>
+
+        <div className="max-w-lg mx-auto px-6 py-16">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -106,26 +126,72 @@ export default function DashboardLayout({
               <Wallet className="w-10 h-10 text-primary" />
             </div>
             <h1 className="text-2xl font-bold text-white mb-3 font-mono">
-              Connect to Continue
+              Sign In to Dashboard
             </h1>
             <p className="text-zinc-500 mb-8 text-sm">
-              Connect your wallet to access the dashboard, manage agents, and track earnings.
+              Connect with Twitter or your wallet to access the dashboard, manage agents, and track earnings.
             </p>
-            <div className="flex flex-col gap-4 items-center">
-              <ConnectWallet className="flex flex-col items-center" />
-              <Link href="/">
+
+            {authMethod === "choice" ? (
+              <div className="space-y-4 max-w-sm mx-auto">
+                {/* Twitter Login - Primary */}
                 <Button
-                  variant="ghost"
-                  size="sm"
-                  className="font-mono text-zinc-500 hover:text-white"
+                  onClick={handleTwitterLogin}
+                  className="w-full font-mono bg-[#1DA1F2] text-white hover:bg-[#1a8cd8] h-12"
                 >
-                  ← Back Home
+                  <Twitter className="w-5 h-5 mr-2" />
+                  Continue with Twitter
                 </Button>
-              </Link>
-            </div>
+
+                <div className="flex items-center gap-3 text-xs text-zinc-600">
+                  <div className="flex-1 border-t border-zinc-800" />
+                  <span>or</span>
+                  <div className="flex-1 border-t border-zinc-800" />
+                </div>
+
+                {/* Wallet Option */}
+                <Button
+                  onClick={() => setAuthMethod("wallet")}
+                  variant="outline"
+                  className="w-full font-mono border-zinc-800 hover:border-zinc-600 h-12"
+                >
+                  <Wallet className="w-5 h-5 mr-2" />
+                  Connect Wallet
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4 max-w-sm mx-auto">
+                <button
+                  onClick={() => setAuthMethod("choice")}
+                  className="text-xs text-zinc-500 hover:text-zinc-400 mb-4 flex items-center gap-1 mx-auto"
+                >
+                  <ArrowLeft className="w-3 h-3" />
+                  Back to options
+                </button>
+                <ConnectWallet className="flex flex-col items-center" />
+              </div>
+            )}
+
+            <Link href="/" className="inline-block mt-6">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="font-mono text-zinc-500 hover:text-white"
+              >
+                ← Back Home
+              </Button>
+            </Link>
+
             <div className="mt-8 pt-6 border-t border-zinc-900">
-              <p className="text-xs text-zinc-600 font-mono">
-                Supported: MetaMask • Coinbase • WalletConnect
+              <p className="text-xs text-zinc-600 font-mono mb-4">
+                Wallet support: MetaMask • Coinbase • WalletConnect
+              </p>
+              <p className="text-xs text-zinc-700">
+                New here?{" "}
+                <Link href="/join" className="text-primary hover:underline">
+                  Register your agent
+                </Link>{" "}
+                first.
               </p>
             </div>
           </motion.div>
@@ -192,14 +258,16 @@ export default function DashboardLayout({
           <div className="p-4 border-t border-zinc-900">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-9 h-9 bg-zinc-800 flex items-center justify-center text-primary font-mono text-sm font-bold">
-                {user.address?.slice(2, 4).toUpperCase() || "U"}
+                {user.twitterHandle?.[0]?.toUpperCase() || user.address?.slice(2, 4).toUpperCase() || "U"}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-white truncate">
                   {user.name || user.handle || "Anon"}
                 </p>
                 <p className="text-xs text-zinc-500 font-mono truncate">
-                  {user.address
+                  {user.twitterHandle 
+                    ? `@${user.twitterHandle}`
+                    : user.address
                     ? `${user.address.slice(0, 6)}...${user.address.slice(-4)}`
                     : user.handle}
                 </p>
@@ -248,7 +316,7 @@ export default function DashboardLayout({
 
           <div className="flex items-center gap-3">
             <QuickSearch />
-            <Link href="/agents" className="hidden sm:block">
+            <Link href="/explore" className="hidden sm:block">
               <Button
                 variant="ghost"
                 size="sm"
