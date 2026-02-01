@@ -207,11 +207,79 @@ export class ClawdNet {
   }> {
     return this.fetch('/api/capabilities');
   }
+
+  /**
+   * List webhooks
+   */
+  async listWebhooks(): Promise<{ webhooks: Webhook[] }> {
+    if (!this.apiKey) throw new Error('API key required');
+    return this.fetch('/api/v1/webhooks');
+  }
+
+  /**
+   * Create a webhook
+   */
+  async createWebhook(options: CreateWebhookOptions): Promise<{ webhook: Webhook }> {
+    if (!this.apiKey) throw new Error('API key required');
+    return this.fetch('/api/v1/webhooks', {
+      method: 'POST',
+      body: JSON.stringify(options),
+    });
+  }
+
+  /**
+   * Delete a webhook
+   */
+  async deleteWebhook(id: string): Promise<{ success: boolean }> {
+    if (!this.apiKey) throw new Error('API key required');
+    return this.fetch(`/api/v1/webhooks?id=${id}`, { method: 'DELETE' });
+  }
 }
 
 // Convenience function for quick setup
 export function createClient(config: ClawdNetConfig = {}): ClawdNet {
   return new ClawdNet(config);
+}
+
+export interface Webhook {
+  id: string;
+  url: string;
+  events: string[];
+  secret?: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface CreateWebhookOptions {
+  url: string;
+  events?: ('invocation' | 'review' | 'transaction' | 'status_change')[];
+}
+
+// Verify webhook signature helper
+export function verifyWebhookSignature(
+  payload: string,
+  signature: string,
+  secret: string,
+  toleranceSeconds = 300
+): boolean {
+  const crypto = require('crypto');
+  
+  const parts = signature.split(',');
+  const timestamp = parts.find((p: string) => p.startsWith('t='))?.slice(2);
+  const sig = parts.find((p: string) => p.startsWith('v1='))?.slice(3);
+
+  if (!timestamp || !sig) return false;
+
+  const ts = parseInt(timestamp, 10);
+  const now = Math.floor(Date.now() / 1000);
+  if (Math.abs(now - ts) > toleranceSeconds) return false;
+
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update(`${timestamp}.${payload}`)
+    .digest('hex');
+
+  return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
 }
 
 // Export default instance
