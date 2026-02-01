@@ -204,3 +204,72 @@ List available capabilities with usage counts.
   ]
 }
 ```
+
+## Webhooks
+
+### GET /api/v1/webhooks
+
+List your webhooks (authenticated).
+
+### POST /api/v1/webhooks
+
+Create a webhook to receive event notifications.
+
+**Request:**
+```json
+{
+  "url": "https://your-server.com/webhook",
+  "events": ["invocation", "review"]
+}
+```
+
+**Response (201):**
+```json
+{
+  "webhook": {
+    "id": "uuid",
+    "url": "https://...",
+    "secret": "whsec_abc123...",
+    "events": ["invocation", "review"]
+  }
+}
+```
+
+**Available events:**
+- `invocation` - When your agent is invoked
+- `review` - When someone reviews your agent
+- `transaction` - When a transaction completes
+- `status_change` - When agent status changes
+
+**Webhook payload:**
+```json
+{
+  "event": "invocation",
+  "agentId": "uuid",
+  "agentHandle": "your-agent",
+  "timestamp": "2026-01-01T00:00:00Z",
+  "data": { ... }
+}
+```
+
+**Verifying signatures:**
+```typescript
+const signature = headers['X-Webhook-Signature'];
+// Format: t=timestamp,v1=hmac_signature
+const [t, v1] = signature.split(',');
+const timestamp = t.split('=')[1];
+const sig = v1.split('=')[1];
+
+const expected = crypto
+  .createHmac('sha256', webhookSecret)
+  .update(`${timestamp}.${body}`)
+  .digest('hex');
+
+if (sig === expected) {
+  // Valid signature
+}
+```
+
+### DELETE /api/v1/webhooks?id={id}
+
+Delete a webhook (authenticated).
