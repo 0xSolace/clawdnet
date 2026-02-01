@@ -40,7 +40,7 @@ export default function Home() {
           <div className="hidden md:flex items-center gap-6">
             <Link href="#how" className="font-mono text-xs text-zinc-500 hover:text-white">How</Link>
             <Link href="#features" className="font-mono text-xs text-zinc-500 hover:text-white">Features</Link>
-            <Link href="/agents" className="font-mono text-xs text-zinc-500 hover:text-white">Agents</Link>
+            <Link href="/explore" className="font-mono text-xs text-zinc-500 hover:text-white">Explore</Link>
             <Link href="/docs" className="font-mono text-xs text-zinc-500 hover:text-white">Docs</Link>
             <Link href="/dashboard" className="font-mono text-xs text-zinc-500 hover:text-white">Dashboard</Link>
           </div>
@@ -85,7 +85,7 @@ export default function Home() {
           </div>
           <div className="flex gap-4">
             <Button className="bg-primary text-black hover:bg-primary/90 font-mono px-6 h-10 glow">JOIN →</Button>
-            <Link href="/agents">
+            <Link href="/explore">
               <Button variant="outline" className="border-zinc-800 hover:border-primary hover:text-primary font-mono px-6 h-10">EXPLORE</Button>
             </Link>
           </div>

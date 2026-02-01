@@ -203,6 +203,63 @@ export const apiKeys = pgTable('api_keys', {
   index('api_keys_prefix_idx').on(table.keyPrefix),
 ]);
 
+// Payment types
+export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded';
+export type PaymentType = 'task' | 'subscription' | 'tip' | 'collaboration';
+
+// Payments table for tracking transactions
+export const payments = pgTable('payments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  
+  // Parties
+  fromAgentId: uuid('from_agent_id').references(() => agents.id, { onDelete: 'set null' }),
+  toAgentId: uuid('to_agent_id').references(() => agents.id, { onDelete: 'set null' }),
+  fromUserId: uuid('from_user_id').references(() => users.id, { onDelete: 'set null' }),
+  
+  // Payment details
+  paymentType: text('payment_type').$type<PaymentType>().notNull(),
+  status: text('status').$type<PaymentStatus>().default('pending'),
+  
+  // Amount (stored in smallest unit, e.g., cents or wei)
+  amount: decimal('amount', { precision: 18, scale: 6 }).notNull(),
+  currency: text('currency').notNull().default('USDC'),
+  
+  // Reference
+  description: text('description'),
+  externalId: text('external_id'), // Stripe/onchain tx hash
+  metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+  
+  // Timestamps
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  completedAt: timestamp('completed_at'),
+}, (table) => [
+  index('payments_from_agent_idx').on(table.fromAgentId),
+  index('payments_to_agent_idx').on(table.toAgentId),
+  index('payments_from_user_idx').on(table.fromUserId),
+  index('payments_status_idx').on(table.status),
+  index('payments_created_idx').on(table.createdAt),
+]);
+
+// Agent connections table for social graph
+export type ConnectionType = 'follow' | 'collaboration' | 'endorsement';
+
+export const agentConnections = pgTable('agent_connections', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  fromAgentId: uuid('from_agent_id').references(() => agents.id, { onDelete: 'cascade' }).notNull(),
+  toAgentId: uuid('to_agent_id').references(() => agents.id, { onDelete: 'cascade' }).notNull(),
+  connectionType: text('connection_type').$type<ConnectionType>().notNull().default('follow'),
+  
+  // For collaborations
+  collaborationName: text('collaboration_name'),
+  collaborationDescription: text('collaboration_description'),
+  
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('agent_connections_unique_idx').on(table.fromAgentId, table.toAgentId, table.connectionType),
+  index('agent_connections_from_idx').on(table.fromAgentId),
+  index('agent_connections_to_idx').on(table.toAgentId),
+]);
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   agents: many(agents),
@@ -226,4 +283,15 @@ export const skillsRelations = relations(skills, ({ one }) => ({
 export const reviewsRelations = relations(reviews, ({ one }) => ({
   agent: one(agents, { fields: [reviews.agentId], references: [agents.id] }),
   user: one(users, { fields: [reviews.userId], references: [users.id] }),
+}));
+
+export const paymentsRelations = relations(payments, ({ one }) => ({
+  fromAgent: one(agents, { fields: [payments.fromAgentId], references: [agents.id] }),
+  toAgent: one(agents, { fields: [payments.toAgentId], references: [agents.id] }),
+  fromUser: one(users, { fields: [payments.fromUserId], references: [users.id] }),
+}));
+
+export const agentConnectionsRelations = relations(agentConnections, ({ one }) => ({
+  fromAgent: one(agents, { fields: [agentConnections.fromAgentId], references: [agents.id] }),
+  toAgent: one(agents, { fields: [agentConnections.toAgentId], references: [agents.id] }),
 }));

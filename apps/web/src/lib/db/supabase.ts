@@ -175,3 +175,196 @@ export async function createUser(data: {
   if (error) throw error;
   return user;
 }
+
+// Agent connections (social graph)
+export async function getAgentConnections(agentId: string, type?: 'follow' | 'collaboration' | 'endorsement') {
+  let query = supabase
+    .from('agent_connections')
+    .select(`
+      *,
+      from_agent:agents!agent_connections_from_agent_id_fk(id, handle, name, avatar_url),
+      to_agent:agents!agent_connections_to_agent_id_fk(id, handle, name, avatar_url)
+    `)
+    .or(`from_agent_id.eq.${agentId},to_agent_id.eq.${agentId}`);
+  
+  if (type) {
+    query = query.eq('connection_type', type);
+  }
+  
+  const { data, error } = await query;
+  if (error) throw error;
+  return data;
+}
+
+export async function createAgentConnection(data: {
+  fromAgentId: string;
+  toAgentId: string;
+  connectionType: 'follow' | 'collaboration' | 'endorsement';
+  collaborationName?: string;
+  collaborationDescription?: string;
+}) {
+  const { data: connection, error } = await supabase
+    .from('agent_connections')
+    .insert({
+      from_agent_id: data.fromAgentId,
+      to_agent_id: data.toAgentId,
+      connection_type: data.connectionType,
+      collaboration_name: data.collaborationName,
+      collaboration_description: data.collaborationDescription,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return connection;
+}
+
+export async function deleteAgentConnection(fromAgentId: string, toAgentId: string, connectionType: string) {
+  const { error } = await supabase
+    .from('agent_connections')
+    .delete()
+    .eq('from_agent_id', fromAgentId)
+    .eq('to_agent_id', toAgentId)
+    .eq('connection_type', connectionType);
+
+  if (error) throw error;
+}
+
+// Payments
+export async function getPayments(options?: {
+  agentId?: string;
+  userId?: string;
+  status?: 'pending' | 'completed' | 'failed' | 'refunded';
+  limit?: number;
+}) {
+  let query = supabase
+    .from('payments')
+    .select(`
+      *,
+      from_agent:agents!payments_from_agent_id_fk(id, handle, name),
+      to_agent:agents!payments_to_agent_id_fk(id, handle, name),
+      from_user:users!payments_from_user_id_fk(id, handle, name)
+    `)
+    .order('created_at', { ascending: false });
+
+  if (options?.agentId) {
+    query = query.or(`from_agent_id.eq.${options.agentId},to_agent_id.eq.${options.agentId}`);
+  }
+  if (options?.userId) {
+    query = query.eq('from_user_id', options.userId);
+  }
+  if (options?.status) {
+    query = query.eq('status', options.status);
+  }
+  if (options?.limit) {
+    query = query.limit(options.limit);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data;
+}
+
+export async function createPayment(data: {
+  fromAgentId?: string;
+  toAgentId?: string;
+  fromUserId?: string;
+  paymentType: 'task' | 'subscription' | 'tip' | 'collaboration';
+  amount: string;
+  currency?: string;
+  description?: string;
+  externalId?: string;
+  metadata?: Record<string, unknown>;
+}) {
+  const { data: payment, error } = await supabase
+    .from('payments')
+    .insert({
+      from_agent_id: data.fromAgentId,
+      to_agent_id: data.toAgentId,
+      from_user_id: data.fromUserId,
+      payment_type: data.paymentType,
+      amount: data.amount,
+      currency: data.currency || 'USDC',
+      description: data.description,
+      external_id: data.externalId,
+      metadata: data.metadata,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return payment;
+}
+
+export async function updatePaymentStatus(
+  paymentId: string,
+  status: 'pending' | 'completed' | 'failed' | 'refunded',
+  externalId?: string
+) {
+  const updates: Record<string, unknown> = { status };
+  if (status === 'completed') {
+    updates.completed_at = new Date().toISOString();
+  }
+  if (externalId) {
+    updates.external_id = externalId;
+  }
+
+  const { data, error } = await supabase
+    .from('payments')
+    .update(updates)
+    .eq('id', paymentId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+// Activity feed helpers
+export async function createFeedEvent(data: {
+  actorId: string;
+  actorType: 'user' | 'agent';
+  eventType: string;
+  message?: string;
+  data?: Record<string, unknown>;
+}) {
+  const { data: event, error } = await supabase
+    .from('feed_events')
+    .insert({
+      actor_id: data.actorId,
+      actor_type: data.actorType,
+      event_type: data.eventType,
+      message: data.message,
+      data: data.data,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return event;
+}
+
+export async function getFeedEvents(options?: {
+  actorId?: string;
+  eventType?: string;
+  limit?: number;
+}) {
+  let query = supabase
+    .from('feed_events')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (options?.actorId) {
+    query = query.eq('actor_id', options.actorId);
+  }
+  if (options?.eventType) {
+    query = query.eq('event_type', options.eventType);
+  }
+  if (options?.limit) {
+    query = query.limit(options.limit);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data;
+}
