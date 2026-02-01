@@ -46,6 +46,7 @@ export type ERC8004Registration = {
 export const agents = pgTable('agents', {
   id: uuid('id').primaryKey().defaultRandom(),
   handle: text('handle').notNull().unique(),
+  agentId: text('agent_id').unique(), // CLW-XXXX-XXXX format unique identifier
   ownerId: uuid('owner_id').references(() => users.id).notNull(),
   name: text('name').notNull(),
   description: text('description'),
@@ -55,6 +56,7 @@ export const agents = pgTable('agents', {
   protocols: text('protocols').array().default(['a2a-v1']),
   trustLevel: text('trust_level').default('directory'), // open, directory, allowlist, private
   isVerified: boolean('is_verified').default(false),
+  verificationLevel: text('verification_level').default('none'), // none, basic, verified, trusted
   isPublic: boolean('is_public').default(true),
   status: text('status').default('offline'), // online, busy, offline
   links: jsonb('links').$type<{
@@ -71,10 +73,25 @@ export const agents = pgTable('agents', {
   registrations: jsonb('registrations').$type<ERC8004Registration[]>().default([]),
   supportedTrust: text('supported_trust').array().default(['reputation']),
   
+  // Stripe Connect fields
+  stripeAccountId: text('stripe_account_id'),
+  stripeOnboardingComplete: boolean('stripe_onboarding_complete').default(false),
+  payoutEnabled: boolean('payout_enabled').default(false),
+  
+  // ERC-8004 On-Chain Identity fields
+  erc8004TokenId: decimal('erc8004_token_id', { precision: 78, scale: 0 }), // On-chain tokenId (uint256)
+  erc8004Registry: text('erc8004_registry'), // Format: "eip155:chainId:address"
+  erc8004Domain: text('erc8004_domain'), // Registered domain
+  erc8004ClaimedAt: timestamp('erc8004_claimed_at'), // When claimed
+  erc8004MetadataUri: text('erc8004_metadata_uri'), // IPFS/HTTPS URI
+  erc8004ReputationSyncedAt: timestamp('erc8004_reputation_synced_at'), // Last sync
+  erc8004ReputationTxHash: text('erc8004_reputation_tx_hash'), // Last sync tx
+  
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => [
   uniqueIndex('agents_handle_idx').on(table.handle),
+  uniqueIndex('agents_agent_id_idx').on(table.agentId),
   index('agents_owner_idx').on(table.ownerId),
   index('agents_status_idx').on(table.status),
   index('agents_wallet_idx').on(table.agentWallet),
@@ -206,6 +223,7 @@ export const apiKeys = pgTable('api_keys', {
 // Payment types
 export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded';
 export type PaymentType = 'task' | 'subscription' | 'tip' | 'collaboration';
+export type EscrowStatus = 'pending' | 'held' | 'released' | 'refunded';
 
 // Payments table for tracking transactions
 export const payments = pgTable('payments', {
@@ -229,6 +247,17 @@ export const payments = pgTable('payments', {
   externalId: text('external_id'), // Stripe/onchain tx hash
   metadata: jsonb('metadata').$type<Record<string, unknown>>(),
   
+  // Stripe fields
+  stripePaymentIntentId: text('stripe_payment_intent_id'),
+  stripeTransferId: text('stripe_transfer_id'),
+  
+  // Escrow fields
+  escrowStatus: text('escrow_status').$type<EscrowStatus>(),
+  escrowReleasedAt: timestamp('escrow_released_at'),
+  taskId: text('task_id'),
+  platformFee: decimal('platform_fee', { precision: 18, scale: 6 }).default('0'),
+  netAmount: decimal('net_amount', { precision: 18, scale: 6 }),
+  
   // Timestamps
   createdAt: timestamp('created_at').defaultNow().notNull(),
   completedAt: timestamp('completed_at'),
@@ -238,6 +267,77 @@ export const payments = pgTable('payments', {
   index('payments_from_user_idx').on(table.fromUserId),
   index('payments_status_idx').on(table.status),
   index('payments_created_idx').on(table.createdAt),
+  index('payments_stripe_pi_idx').on(table.stripePaymentIntentId),
+  index('payments_escrow_idx').on(table.escrowStatus),
+]);
+
+// Task status types
+export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
+
+// Tasks table for escrow flow
+export const tasks = pgTable('tasks', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  
+  // Parties
+  requesterUserId: uuid('requester_user_id').references(() => users.id, { onDelete: 'set null' }),
+  requesterAgentId: uuid('requester_agent_id').references(() => agents.id, { onDelete: 'set null' }),
+  providerAgentId: uuid('provider_agent_id').references(() => agents.id, { onDelete: 'set null' }).notNull(),
+  
+  // Task details
+  skillId: text('skill_id').notNull(),
+  description: text('description'),
+  inputData: jsonb('input_data').$type<Record<string, unknown>>(),
+  outputData: jsonb('output_data').$type<Record<string, unknown>>(),
+  
+  // Status
+  status: text('status').$type<TaskStatus>().default('pending'),
+  
+  // Payment
+  paymentId: uuid('payment_id').references(() => payments.id, { onDelete: 'set null' }),
+  agreedPrice: decimal('agreed_price', { precision: 18, scale: 6 }).notNull(),
+  currency: text('currency').default('USD'),
+  
+  // Timing
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  startedAt: timestamp('started_at'),
+  completedAt: timestamp('completed_at'),
+  deadline: timestamp('deadline'),
+}, (table) => [
+  index('tasks_requester_user_idx').on(table.requesterUserId),
+  index('tasks_provider_agent_idx').on(table.providerAgentId),
+  index('tasks_status_idx').on(table.status),
+]);
+
+// ERC-8004 Feedback Sync table for tracking synced reviews
+export const erc8004FeedbackSync = pgTable('erc8004_feedback_sync', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  
+  // ClawdNet references
+  agentId: uuid('agent_id').references(() => agents.id, { onDelete: 'cascade' }).notNull(),
+  reviewId: uuid('review_id').references(() => reviews.id, { onDelete: 'cascade' }).notNull(),
+  
+  // On-chain references
+  chainId: integer('chain_id').notNull(),
+  registryAddress: text('registry_address').notNull(),
+  erc8004AgentId: decimal('erc8004_agent_id', { precision: 78, scale: 0 }).notNull(),
+  feedbackIndex: decimal('feedback_index', { precision: 78, scale: 0 }).notNull(),
+  clientAddress: text('client_address').notNull(),
+  
+  // Transaction details
+  txHash: text('tx_hash').notNull(),
+  blockNumber: decimal('block_number', { precision: 78, scale: 0 }),
+  
+  // Metadata
+  value: integer('value').notNull(),
+  valueDecimals: integer('value_decimals').default(0),
+  tag1: text('tag1'),
+  tag2: text('tag2'),
+  
+  syncedAt: timestamp('synced_at').defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('erc8004_feedback_unique_idx').on(table.chainId, table.registryAddress, table.erc8004AgentId, table.feedbackIndex),
+  index('erc8004_feedback_agent_idx').on(table.agentId),
+  index('erc8004_feedback_review_idx').on(table.reviewId),
 ]);
 
 // Agent connections table for social graph
@@ -291,7 +391,19 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
   fromUser: one(users, { fields: [payments.fromUserId], references: [users.id] }),
 }));
 
+export const tasksRelations = relations(tasks, ({ one }) => ({
+  requesterUser: one(users, { fields: [tasks.requesterUserId], references: [users.id] }),
+  requesterAgent: one(agents, { fields: [tasks.requesterAgentId], references: [agents.id] }),
+  providerAgent: one(agents, { fields: [tasks.providerAgentId], references: [agents.id] }),
+  payment: one(payments, { fields: [tasks.paymentId], references: [payments.id] }),
+}));
+
 export const agentConnectionsRelations = relations(agentConnections, ({ one }) => ({
   fromAgent: one(agents, { fields: [agentConnections.fromAgentId], references: [agents.id] }),
   toAgent: one(agents, { fields: [agentConnections.toAgentId], references: [agents.id] }),
+}));
+
+export const erc8004FeedbackSyncRelations = relations(erc8004FeedbackSync, ({ one }) => ({
+  agent: one(agents, { fields: [erc8004FeedbackSync.agentId], references: [agents.id] }),
+  review: one(reviews, { fields: [erc8004FeedbackSync.reviewId], references: [reviews.id] }),
 }));

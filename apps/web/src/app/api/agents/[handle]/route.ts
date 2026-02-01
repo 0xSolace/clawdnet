@@ -43,6 +43,7 @@ export async function GET(
 
         const result = {
           id: agent.id,
+          agentId: agent.agent_id,
           handle: agent.handle,
           name: agent.name,
           description: agent.description,
@@ -52,8 +53,11 @@ export async function GET(
           protocols: agent.protocols || ['a2a-v1'],
           trustLevel: agent.trust_level,
           isVerified: agent.is_verified,
+          verificationLevel: agent.verification_level || 'none',
           status: agent.status,
           links: agent.links,
+          stripeOnboardingComplete: agent.stripe_onboarding_complete || false,
+          payoutEnabled: agent.payout_enabled || false,
           createdAt: agent.created_at,
           updatedAt: agent.updated_at,
           owner: agent.users ? {
@@ -71,6 +75,7 @@ export async function GET(
             uptimePercent: agent.agent_stats.uptime_percent,
             reviewsCount: agent.agent_stats.reviews_count,
             avgRating: agent.agent_stats.avg_rating,
+            connectionsCount: agent.agent_stats.connections_count || 0,
           } : null,
           skills: (agent.skills || []).map((s: any) => ({
             id: s.id,

@@ -23,10 +23,15 @@ import {
   Globe,
   Key,
   Webhook,
+  Shield,
 } from "lucide-react";
+import { AgentIdDisplay, AgentIdCard } from "@/components/agent-id";
+import { VerificationRequest } from "@/components/verification-request";
+import { ReputationDisplay } from "@/components/reputation-display";
 
 interface Agent {
   id: string;
+  agentId?: string;
   handle: string;
   name: string;
   description: string;
@@ -35,12 +40,14 @@ interface Agent {
   status: string;
   isPublic: boolean;
   isVerified: boolean;
+  verificationLevel?: string;
   webhookSecret?: string;
   createdAt?: string;
   stats?: {
     totalTransactions?: number;
     totalRevenue?: string;
     avgRating?: string;
+    reputationScore?: string;
     uptime?: number;
     lastActive?: string;
   };
@@ -57,7 +64,7 @@ export default function AgentSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"general" | "api" | "danger">("general");
+  const [activeTab, setActiveTab] = useState<"general" | "identity" | "api" | "danger">("general");
 
   // Form state
   const [name, setName] = useState("");
@@ -320,6 +327,12 @@ export default function AgentSettingsPage() {
             label="General"
           />
           <TabButton
+            active={activeTab === "identity"}
+            onClick={() => setActiveTab("identity")}
+            icon={Shield}
+            label="Identity & Verification"
+          />
+          <TabButton
             active={activeTab === "api"}
             onClick={() => setActiveTab("api")}
             icon={Key}
@@ -423,6 +436,59 @@ export default function AgentSettingsPage() {
                 {saving ? "Saving..." : "Save Changes"}
               </Button>
             </div>
+          </>
+        )}
+
+        {activeTab === "identity" && (
+          <>
+            {/* Agent ID Card */}
+            <div className="bg-zinc-950 border border-zinc-900 p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <Shield className="w-5 h-5 text-primary" />
+                <h3 className="text-lg font-bold text-white font-mono">Agent Identity</h3>
+              </div>
+              
+              {agent?.agentId ? (
+                <div className="space-y-6">
+                  <AgentIdCard
+                    agentId={agent.agentId}
+                    handle={agent.handle}
+                    name={agent.name}
+                    isVerified={agent.isVerified}
+                    createdAt={agent.createdAt}
+                    className="max-w-sm"
+                  />
+                  
+                  {/* Reputation Display */}
+                  <div className="border-t border-zinc-800 pt-6">
+                    <h4 className="font-mono text-xs text-zinc-500 mb-4 uppercase">Reputation Score</h4>
+                    <ReputationDisplay
+                      score={Number(agent.stats?.reputationScore) || 0}
+                      size="lg"
+                      showTier={true}
+                      showProgress={true}
+                      showIcon={true}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <div className="text-zinc-500 font-mono text-sm mb-4">
+                    Agent ID will be generated after registration is complete.
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* Verification Section */}
+            <VerificationRequest
+              agentHandle={handle}
+              currentStatus={{
+                isVerified: agent?.isVerified || false,
+                verificationLevel: agent?.verificationLevel,
+              }}
+              onVerified={() => fetchAgent()}
+            />
           </>
         )}
 

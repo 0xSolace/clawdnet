@@ -7,9 +7,15 @@ import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { getTheme, getThemeCSS, themes, AgentTheme } from '@/lib/themes';
+import { PayAgentButton } from '@/components/payments';
+import { AgentIdDisplay } from '@/components/agent-id';
+import { VerifiedBadgeLarge, VerificationIndicator } from '@/components/verified-badge';
+import { ReputationDisplay, ReputationBadge } from '@/components/reputation-display';
+import { VERIFICATION_LEVELS, type VerificationLevel } from '@/lib/identity';
 
 interface Agent {
   id: string;
+  agentId?: string;
   handle: string;
   name: string;
   description: string;
@@ -20,8 +26,13 @@ interface Agent {
   protocols: string[];
   trustLevel: string;
   isVerified: boolean;
+  verificationLevel?: VerificationLevel;
   status: string;
   profileTheme?: string;
+  stripeOnboardingComplete?: boolean;
+  payoutEnabled?: boolean;
+  agentWallet?: string;
+  x402Support?: boolean;
   links: {
     website?: string;
     github?: string;
@@ -307,8 +318,13 @@ export default function AgentPublicProfile() {
                   {agent.trustLevel}
                 </Badge>
               </div>
-              <div className="font-mono text-sm mb-4" style={{ color: theme.textMuted }}>
-                @{agent.handle}
+              <div className="flex items-center gap-4 mb-4 flex-wrap">
+                <span className="font-mono text-sm" style={{ color: theme.textMuted }}>
+                  @{agent.handle}
+                </span>
+                {agent.agentId && (
+                  <AgentIdDisplay agentId={agent.agentId} size="xs" />
+                )}
               </div>
               {agent.description && (
                 <p className="text-base max-w-2xl mb-4" style={{ color: theme.text }}>
@@ -353,7 +369,14 @@ export default function AgentPublicProfile() {
           </div>
 
           {/* Action Buttons */}
-          <div className="flex gap-3 pt-4">
+          <div className="flex gap-3 pt-4 flex-wrap">
+            <PayAgentButton
+              agentHandle={agent.handle}
+              agentName={agent.name}
+              canReceivePayments={agent.stripeOnboardingComplete || !!(agent as any).agentWallet}
+              hasX402={!!(agent as any).agentWallet && (agent as any).x402Support !== false}
+              hasStripe={agent.stripeOnboardingComplete}
+            />
             <Button 
               variant="outline"
               className="font-mono"
@@ -378,7 +401,19 @@ export default function AgentPublicProfile() {
           className="mt-8 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1"
           style={{ backgroundColor: theme.cardBorder }}
         >
-          {stats.map((stat, i) => (
+          {/* Reputation - Featured stat with badge */}
+          <div 
+            className="p-4 text-center transition-all hover:scale-105"
+            style={{ backgroundColor: theme.card }}
+          >
+            <div className="text-lg mb-1">⚡</div>
+            <ReputationBadge score={Number(agent.stats?.reputationScore) || 0} size="sm" />
+            <div className="text-xs font-mono mt-1" style={{ color: theme.textMuted }}>
+              REPUTATION
+            </div>
+          </div>
+          
+          {stats.slice(1).map((stat, i) => (
             <div 
               key={i} 
               className="p-4 text-center transition-all hover:scale-105"

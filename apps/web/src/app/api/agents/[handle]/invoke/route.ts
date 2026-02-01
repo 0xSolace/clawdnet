@@ -2,29 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { MOCK_AGENTS } from '@/lib/db';
 import { supabase } from '@/lib/db/supabase';
 import { triggerWebhooks } from '@/lib/webhooks';
-
-// x402 Payment Requirements
-interface X402PaymentRequired {
-  version: '1';
-  accepts: Array<{
-    scheme: 'exact';
-    network: string;
-    maxAmountRequired: string;
-    resource: string;
-    description: string;
-    mimeType: string;
-    payTo: string;
-    maxTimeoutSeconds: number;
-    asset: string;
-  }>;
-  error?: string;
-}
-
-// USDC contract addresses by network
-const USDC_ADDRESSES: Record<string, string> = {
-  'eip155:84532': '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // Base Sepolia
-  'eip155:8453': '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // Base Mainnet
-};
+import { 
+  createPaymentRequirements, 
+  create402Response, 
+  verifyPayment,
+  getAgentPaymentConfig,
+  BASE_USDC_ADDRESS,
+  X402_NETWORK,
+} from '@/lib/x402';
+import { parseUnits } from 'viem';
 
 // POST /api/agents/[handle]/invoke - Invoke an agent skill
 export async function POST(
@@ -138,35 +124,76 @@ export async function POST(
     }
 
     // Check for x402 payment if required
-    const paymentHeader = request.headers.get('X-PAYMENT') || request.headers.get('x-payment');
-    const network = 'eip155:84532';
-    const resource = `/api/agents/${handle}/invoke`;
-    const payTo = agent.agent_wallet || agent.agentWallet || '0x0000000000000000000000000000000000000000';
-    const skillPrice = '0.01'; // Default price
+    const paymentConfig = getAgentPaymentConfig(agent);
+    const paymentHeader = request.headers.get('X-PAYMENT') || request.headers.get('x-payment') || request.headers.get('payment-signature');
+    
+    // Get skill price from database or default
+    let skillPrice = 0.01; // Default $0.01 per invocation
+    if (skill) {
+      try {
+        const { data: skillData } = await supabase
+          .from('skills')
+          .select('price')
+          .eq('agent_id', agent.id)
+          .eq('skill_id', skill)
+          .single();
+        
+        if (skillData?.price) {
+          skillPrice = parseFloat(skillData.price);
+        }
+      } catch {
+        // Use default price
+      }
+    }
 
-    if (!paymentHeader && !payment && (agent.x402_support || agent.x402Support)) {
-      const paymentRequired: X402PaymentRequired = {
-        version: '1',
-        accepts: [
-          {
-            scheme: 'exact',
-            network,
-            maxAmountRequired: skillPrice,
-            resource,
-            description: `Invoke ${skill || 'agent'} on ${agent.name}`,
-            mimeType: 'application/json',
-            payTo,
-            maxTimeoutSeconds: 300,
-            asset: USDC_ADDRESSES[network],
-          },
-        ],
-        error: 'Payment required to invoke this skill',
-      };
-
-      return NextResponse.json(paymentRequired, {
-        status: 402,
-        headers: { 'X-PAYMENT-REQUIRED': 'true' },
+    // Check if x402 payment is required and not provided
+    if (paymentConfig.x402Enabled && !paymentHeader && !payment) {
+      // Create 402 response with payment requirements
+      const requirements = createPaymentRequirements({
+        receiverWallet: paymentConfig.walletAddress!,
+        amountUsd: skillPrice,
+        description: `Invoke ${skill || 'agent'} on ${agent.name}`,
+        skillId: skill,
+        agentHandle: handle,
       });
+      
+      return create402Response(requirements);
+    }
+
+    // Verify x402 payment if header provided
+    if (paymentHeader && paymentConfig.x402Enabled) {
+      const verification = await verifyPayment(request);
+      
+      if (!verification.valid) {
+        return NextResponse.json({
+          error: 'Payment verification failed',
+          details: verification.error,
+        }, { 
+          status: 402,
+          headers: { 'X-PAYMENT-REQUIRED': 'true' },
+        });
+      }
+      
+      // Log the payment
+      try {
+        await supabase.from('payments').insert({
+          to_agent_id: agent.id,
+          payment_type: 'task',
+          amount: skillPrice.toString(),
+          currency: 'USDC',
+          status: 'completed',
+          external_id: verification.txHash,
+          description: `${skill || 'invoke'} payment`,
+          metadata: {
+            payer: verification.payer,
+            skill,
+            protocol: 'x402',
+          },
+          completed_at: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.error('Failed to log x402 payment:', err);
+      }
     }
 
     // Generate mock response for agents without real endpoints

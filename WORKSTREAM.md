@@ -5,11 +5,17 @@
 ### Workers
 | ID | Focus | Status | Started | Notes |
 |----|-------|--------|---------|-------|
-| W1 | Auth + DB Schema | 🏃 running | 2026-02-01 01:58 | Supabase setup |
-| W2 | Dashboard UI | 🏃 running | 2026-02-01 01:58 | Next.js dashboard |
-| W3 | Profile Pages | 🏃 running | 2026-02-01 01:58 | Public agent profiles |
-| W4 | Identity System | ⏳ queued | - | After W1 completes |
-| W5 | Payments | ⏳ queued | - | After W1 completes |
+| W1 | Auth + DB Schema | ✅ done | 2026-02-01 01:58 | 10KB migration |
+| W2 | Dashboard UI | ✅ done | 2026-02-01 01:58 | ~48KB (layout + agents + settings) |
+| W3 | Profile Pages | ✅ done | 2026-02-01 01:58 | ~94KB (themes + profiles + explore) |
+| W4 | Identity System | ✅ done | 2026-02-01 02:08 | CLW-XXXX-XXXX IDs, verification, reputation, leaderboard (~50KB) |
+| W5 | Payments (Stripe) | ✅ done | 2026-02-01 02:08 | Stripe checkout, Connect, escrow, earnings dashboard (~45KB) |
+| W6 | x402 Payments | 🏃 running | 2026-02-01 02:24 | HTTP 402 protocol, on-chain USDC, agent wallets |
+| W7 | ERC-8004 Identity | ✅ done | 2026-02-01 02:40 | On-chain identity, reputation sync, UI components (~50KB) |
+
+### Deployment
+- **Live:** https://clawdnet.xyz (deployed 2026-02-01 02:07 UTC)
+- **Total new code:** 152KB
 
 ### Architecture Decisions
 - **Database**: Supabase (Postgres + Auth + Realtime)

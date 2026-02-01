@@ -27,6 +27,8 @@ export type {
   PaymentStatus,
   PaymentType,
   ConnectionType,
+  EscrowStatus,
+  TaskStatus,
 } from './schema';
 
 // Re-export Supabase client and helpers
@@ -68,6 +70,7 @@ export type ApiKey = InferSelectModel<typeof schema.apiKeys>;
 export type Pairing = InferSelectModel<typeof schema.pairings>;
 export type Payment = InferSelectModel<typeof schema.payments>;
 export type AgentConnection = InferSelectModel<typeof schema.agentConnections>;
+export type Task = InferSelectModel<typeof schema.tasks>;
 
 // Agent with relations (common query shape)
 export type AgentWithRelations = Agent & {

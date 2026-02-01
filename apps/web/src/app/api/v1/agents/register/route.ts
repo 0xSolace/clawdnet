@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
 import crypto from 'crypto';
+import { generateAgentId, validateHandle } from '@/lib/identity';
 
 function generateApiKey(): string {
   return `clawdnet_${crypto.randomBytes(24).toString('base64url')}`;
@@ -8,6 +9,27 @@ function generateApiKey(): string {
 
 function generateClaimCode(): string {
   return crypto.randomBytes(16).toString('base64url');
+}
+
+async function generateUniqueAgentId(): Promise<string> {
+  let id: string;
+  let attempts = 0;
+  const maxAttempts = 10;
+  
+  do {
+    id = generateAgentId();
+    // Check if already exists
+    const { data: existing } = await supabase
+      .from('agents')
+      .select('id')
+      .eq('agent_id', id)
+      .single();
+    
+    if (!existing) break;
+    attempts++;
+  } while (attempts < maxAttempts);
+  
+  return id;
 }
 
 // POST /api/v1/agents/register - Register a new agent (unauthenticated)
@@ -26,10 +48,19 @@ export async function POST(request: NextRequest) {
 
     // Validate handle format
     const handleLower = handle.toLowerCase();
-    if (!/^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/.test(handleLower)) {
+    const handleValidation = validateHandle(handleLower);
+    if (!handleValidation.valid) {
       return NextResponse.json(
-        { error: 'Invalid handle. Use 3-30 lowercase letters, numbers, and hyphens.' },
+        { error: handleValidation.error || 'Invalid handle format' },
         { status: 400 }
+      );
+    }
+    
+    // Check for premium/reserved handles
+    if (handleValidation.isReserved) {
+      return NextResponse.json(
+        { error: 'This handle is reserved and cannot be used' },
+        { status: 403 }
       );
     }
 
@@ -50,12 +81,14 @@ export async function POST(request: NextRequest) {
     // Generate credentials
     const apiKey = generateApiKey();
     const claimCode = generateClaimCode();
+    const agentId = await generateUniqueAgentId();
 
     // Create the agent (unclaimed - no owner_id yet)
     const { data: agent, error } = await supabase
       .from('agents')
       .insert({
         handle: handleLower,
+        agent_id: agentId,
         name,
         description: description || '',
         endpoint: endpoint || `https://clawdnet.xyz/api/agents/${handleLower}/invoke`,
@@ -63,6 +96,7 @@ export async function POST(request: NextRequest) {
         protocols: ['a2a-v1', 'erc-8004'],
         trust_level: 'directory',
         is_verified: false,
+        verification_level: 'none',
         is_public: false, // Not public until claimed
         status: 'pending',
         api_key: apiKey,
@@ -102,6 +136,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       agent: {
         id: agent.id,
+        agent_id: agentId,
         handle: agent.handle,
         name: agent.name,
         api_key: apiKey,
@@ -111,6 +146,7 @@ export async function POST(request: NextRequest) {
       important: '⚠️ Save your API key! Send claim_url to your human.',
       next_steps: [
         'Save your api_key securely - you need it for all requests',
+        `Your unique Agent ID is ${agentId} - use this for identification`,
         'Send claim_url to your human to verify ownership',
         'Once claimed, your agent will be live on the network',
       ],

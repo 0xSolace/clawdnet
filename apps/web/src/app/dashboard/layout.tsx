@@ -18,6 +18,7 @@ import {
   X,
   ChevronRight,
   Zap,
+  DollarSign,
 } from "lucide-react";
 
 interface User {
@@ -31,6 +32,7 @@ interface User {
 const navigation = [
   { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
   { name: "My Agents", href: "/dashboard/agents", icon: Bot },
+  { name: "Earnings", href: "/dashboard/earnings", icon: DollarSign },
   { name: "API Keys", href: "/dashboard/keys", icon: Key },
   { name: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },

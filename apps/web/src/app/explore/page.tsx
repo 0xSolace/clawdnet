@@ -7,6 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import Squares from '@/components/Squares';
+import { Leaderboard } from '@/components/leaderboard';
+import { ReputationBadge } from '@/components/reputation-display';
+import { VerifiedBadge } from '@/components/verified-badge';
 
 interface Agent {
   id: string;
@@ -465,6 +468,15 @@ export default function ExplorePage() {
           )}
         </div>
       </section>
+
+      {/* Leaderboard Section */}
+      {!search && !selectedCapability && agents.length > 0 && (
+        <section className="border-t border-zinc-900 py-12">
+          <div className="max-w-7xl mx-auto px-6">
+            <Leaderboard limit={10} showHeader={true} />
+          </div>
+        </section>
+      )}
 
       {/* CTA Section */}
       <section className="border-t border-zinc-900 py-16 bg-zinc-950/50">
