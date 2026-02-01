@@ -24,10 +24,15 @@ import {
   Key,
   Webhook,
   Shield,
+  Power,
+  BarChart3,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
 import { AgentIdDisplay, AgentIdCard } from "@/components/agent-id";
 import { VerificationRequest } from "@/components/verification-request";
 import { ReputationDisplay } from "@/components/reputation-display";
+import ApiKeyDisplay from "@/components/dashboard/ApiKeyDisplay";
 
 interface Agent {
   id: string;
@@ -166,6 +171,31 @@ export default function AgentSettingsPage() {
     setTimeout(() => setCopied(null), 2000);
   }
 
+  async function toggleAgentStatus() {
+    if (!agent) return;
+    const newStatus = agent.status === "online" ? "offline" : "online";
+    try {
+      await fetch(`/api/agents/${handle}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      setAgent({ ...agent, status: newStatus });
+      setStatus(newStatus);
+    } catch (err) {
+      setError("Failed to update status");
+    }
+  }
+
+  async function regenerateApiKey(): Promise<string> {
+    const res = await fetch(`/api/agents/${handle}/regenerate-key`, {
+      method: "POST",
+    });
+    if (!res.ok) throw new Error("Failed to regenerate key");
+    const data = await res.json();
+    return data.apiKey;
+  }
+
   if (loading) {
     return (
       <div className="p-6 lg:p-8 flex items-center justify-center min-h-[400px]">
@@ -244,11 +274,72 @@ export default function AgentSettingsPage() {
         </Link>
       </motion.div>
 
-      {/* Stats row */}
+      {/* Quick Actions */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.05 }}
+        className="flex flex-wrap gap-2 mb-6"
+      >
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => toggleAgentStatus()}
+          className={`font-mono text-xs ${
+            agent?.status === "online"
+              ? "border-green-500/30 text-green-400 hover:bg-green-500/10"
+              : "border-zinc-800 text-zinc-400 hover:text-white"
+          }`}
+        >
+          <Power className="w-3 h-3 mr-2" />
+          {agent?.status === "online" ? "Online" : "Set Online"}
+        </Button>
+        
+        {!agent?.isVerified && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setActiveTab("identity")}
+            className="font-mono text-xs border-primary/30 text-primary hover:bg-primary/10"
+          >
+            <CheckCircle className="w-3 h-3 mr-2" />
+            Get Verified
+          </Button>
+        )}
+        
+        <Link href="/dashboard/analytics">
+          <Button
+            variant="outline"
+            size="sm"
+            className="font-mono text-xs border-zinc-800 text-zinc-400 hover:text-white"
+          >
+            <BarChart3 className="w-3 h-3 mr-2" />
+            View Analytics
+          </Button>
+        </Link>
+        
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            copyToClipboard(`https://clawdnet.xyz/api/v1/agents/${handle}`, "api-url");
+          }}
+          className="font-mono text-xs border-zinc-800 text-zinc-400 hover:text-white"
+        >
+          {copied === "api-url" ? (
+            <Check className="w-3 h-3 mr-2 text-primary" />
+          ) : (
+            <Copy className="w-3 h-3 mr-2" />
+          )}
+          Copy API URL
+        </Button>
+      </motion.div>
+
+      {/* Stats row */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.08 }}
         className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8"
       >
         <div className="bg-zinc-950 border border-zinc-900 p-4">
@@ -494,6 +585,13 @@ export default function AgentSettingsPage() {
 
         {activeTab === "api" && (
           <>
+            {/* API Key Display */}
+            <ApiKeyDisplay
+              apiKey={agent?.webhookSecret}
+              onRegenerate={regenerateApiKey}
+              className="mb-6"
+            />
+
             <div className="bg-zinc-950 border border-zinc-900 p-6 space-y-6">
               <div>
                 <label className="block text-xs text-zinc-500 font-mono mb-2">
@@ -526,7 +624,37 @@ export default function AgentSettingsPage() {
 
               <div>
                 <label className="block text-xs text-zinc-500 font-mono mb-2">
-                  AGENT URL
+                  AGENT API URL
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    value={`https://clawdnet.xyz/api/v1/agents/${handle}`}
+                    readOnly
+                    className="bg-zinc-900 border-zinc-800 text-zinc-400 font-mono flex-1"
+                  />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="border-zinc-800"
+                    onClick={() =>
+                      copyToClipboard(`https://clawdnet.xyz/api/v1/agents/${handle}`, "api-endpoint")
+                    }
+                  >
+                    {copied === "api-endpoint" ? (
+                      <Check className="w-4 h-4 text-primary" />
+                    ) : (
+                      <Copy className="w-4 h-4" />
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-zinc-600 mt-1.5">
+                  Use this to invoke your agent programmatically
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs text-zinc-500 font-mono mb-2">
+                  PUBLIC PROFILE URL
                 </label>
                 <div className="flex gap-2">
                   <Input
@@ -550,37 +678,27 @@ export default function AgentSettingsPage() {
                   </Button>
                 </div>
                 <p className="text-xs text-zinc-600 mt-1.5">
-                  Public URL for your agent's profile
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs text-zinc-500 font-mono mb-2">
-                  WEBHOOK SECRET
-                </label>
-                <div className="flex gap-2">
-                  <Input
-                    value={agent?.webhookSecret || "••••••••••••••••"}
-                    readOnly
-                    type="password"
-                    className="bg-zinc-900 border-zinc-800 text-zinc-400 font-mono flex-1"
-                  />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="border-zinc-800"
-                    title="Regenerate"
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                  </Button>
-                </div>
-                <p className="text-xs text-zinc-600 mt-1.5">
-                  Use this to verify incoming webhook requests
+                  Share this URL for others to discover your agent
                 </p>
               </div>
             </div>
 
-            <div className="flex justify-end">
+            {/* Usage example */}
+            <div className="bg-zinc-950 border border-zinc-900 p-4 mt-6">
+              <h3 className="text-xs text-zinc-500 font-mono mb-3 uppercase">
+                Example Request
+              </h3>
+              <div className="bg-zinc-900 p-3 overflow-x-auto">
+                <code className="text-xs text-zinc-400 font-mono whitespace-pre">
+{`curl -X POST https://clawdnet.xyz/api/v1/agents/${handle}/invoke \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"message": "Hello agent!"}'`}
+                </code>
+              </div>
+            </div>
+
+            <div className="flex justify-end mt-6">
               <Button
                 onClick={handleSave}
                 disabled={saving}

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { ConnectWallet } from "@/components/connect-wallet";
+import QuickSearch from "@/components/dashboard/QuickSearch";
 import {
   LayoutDashboard,
   Bot,
@@ -246,16 +247,17 @@ export default function DashboardLayout({
           </div>
 
           <div className="flex items-center gap-3">
-            <Link href="/agents">
+            <QuickSearch />
+            <Link href="/agents" className="hidden sm:block">
               <Button
                 variant="ghost"
                 size="sm"
                 className="text-zinc-500 hover:text-white font-mono text-xs"
               >
-                Explore Agents
+                Explore
               </Button>
             </Link>
-            <Link href="/docs">
+            <Link href="/docs" className="hidden sm:block">
               <Button
                 variant="outline"
                 size="sm"

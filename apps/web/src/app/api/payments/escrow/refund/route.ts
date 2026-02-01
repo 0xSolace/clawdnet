@@ -8,6 +8,7 @@ import { refundEscrow } from '@/lib/stripe';
 import { supabase, createFeedEvent } from '@/lib/db/db';
 import { cookies } from 'next/headers';
 import * as jose from 'jose';
+import { errors, ErrorCode, errorResponse } from '@/lib/errors';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'dev-secret');
 
@@ -28,14 +29,14 @@ export async function POST(req: NextRequest) {
   try {
     const user = await getUser(req);
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return errors.unauthorized('Sign in to request escrow refunds.');
     }
 
     const body = await req.json();
     const { taskId, reason } = body;
 
     if (!taskId) {
-      return NextResponse.json({ error: 'Task ID required' }, { status: 400 });
+      return errors.missingRequired(['taskId']);
     }
 
     // Get task with payment
@@ -49,26 +50,24 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (taskError || !task) {
-      return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+      return errorResponse(ErrorCode.TASK_NOT_FOUND, `Task '${taskId}' not found.`);
     }
 
     // Verify user is the task requester
     if (task.requester_user_id !== user.userId) {
-      return NextResponse.json(
-        { error: 'Only task requester can request refund' },
-        { status: 403 }
-      );
+      return errors.forbidden('Only the task requester can request a refund.');
     }
 
     const payment = task.payment;
     if (!payment || !payment.stripe_payment_intent_id) {
-      return NextResponse.json({ error: 'No payment found for task' }, { status: 400 });
+      return errorResponse(ErrorCode.PAYMENT_NOT_FOUND, 'No payment found for this task.');
     }
 
     if (payment.escrow_status !== 'held' && payment.escrow_status !== 'pending') {
-      return NextResponse.json(
-        { error: `Cannot refund: escrow status is ${payment.escrow_status}` },
-        { status: 400 }
+      return errorResponse(
+        ErrorCode.VALIDATION_ERROR,
+        `Cannot refund: escrow status is '${payment.escrow_status}'. Must be 'held' or 'pending'.`,
+        { currentStatus: payment.escrow_status }
       );
     }
 
@@ -120,9 +119,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error('Escrow refund error:', error);
-    return NextResponse.json(
-      { error: 'Failed to refund escrow' },
-      { status: 500 }
-    );
+    return errors.internalError('refunding escrow');
   }
 }

@@ -10,6 +10,7 @@ import { getTheme, getThemeCSS, themes, AgentTheme } from '@/lib/themes';
 import { PayAgentButton } from '@/components/payments';
 import { AgentIdDisplay } from '@/components/agent-id';
 import { VerifiedBadgeLarge, VerificationIndicator } from '@/components/verified-badge';
+import { VerificationSection } from '@/components/verification-section';
 import { ReputationDisplay, ReputationBadge } from '@/components/reputation-display';
 import { VERIFICATION_LEVELS, type VerificationLevel } from '@/lib/identity';
 
@@ -489,6 +490,19 @@ export default function AgentPublicProfile() {
                 ))}
               </div>
             </motion.section>
+
+            {/* Verification Status */}
+            <VerificationSection 
+              handle={agent.handle}
+              isOwner={false}
+              theme={{
+                card: theme.card,
+                cardBorder: theme.cardBorder,
+                primary: theme.primary,
+                text: theme.text,
+                textMuted: theme.textMuted,
+              }}
+            />
 
             {/* Skills/Services */}
             <motion.section

@@ -10,6 +10,7 @@ import { supabase, createPayment } from '@/lib/db/db';
 import { cookies } from 'next/headers';
 import * as jose from 'jose';
 import { getAgentPaymentConfig, createPaymentRequirements } from '@/lib/x402';
+import { errors, ErrorCode, errorResponse } from '@/lib/errors';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'dev-secret');
 
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
   try {
     const user = await getUser(req);
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return errors.unauthorized('Sign in at clawdnet.xyz to make payments.');
     }
 
     const body = await req.json();
@@ -43,10 +44,11 @@ export async function POST(req: NextRequest) {
     } = body;
 
     if (!agentHandle || !amount || amount <= 0) {
-      return NextResponse.json(
-        { error: 'Agent handle and positive amount required' },
-        { status: 400 }
-      );
+      const missing = [];
+      if (!agentHandle) missing.push('agentHandle');
+      if (!amount) missing.push('amount');
+      if (missing.length > 0) return errors.missingRequired(missing);
+      return errors.invalidAmount('Amount must be greater than 0.');
     }
 
     // Get agent details
@@ -57,7 +59,7 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (agentError || !agent) {
-      return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
+      return errors.agentNotFound(agentHandle);
     }
 
     // Get payment config
@@ -73,23 +75,22 @@ export async function POST(req: NextRequest) {
           description: description || `Payment to @${agent.handle}`,
         });
         
-        return NextResponse.json({
-          error: 'Stripe not available',
-          message: 'This agent accepts crypto payments via x402',
-          x402: {
-            available: true,
-            walletAddress: paymentConfig.agentWallet,
-            network: 'base',
-            asset: 'USDC',
-            requirements,
-          },
-        }, { status: 400 });
+        return errorResponse(
+          ErrorCode.PAYMENT_NOT_SETUP,
+          'Stripe not available for this agent. Use x402 crypto payment instead.',
+          {
+            x402: {
+              available: true,
+              walletAddress: paymentConfig.agentWallet,
+              network: 'base',
+              asset: 'USDC',
+              requirements,
+            },
+          }
+        );
       }
       
-      return NextResponse.json(
-        { error: 'Agent has not set up payments yet' },
-        { status: 400 }
-      );
+      return errors.paymentNotSetup(agent.handle);
     }
 
     // Convert dollars to cents
@@ -153,9 +154,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(response);
   } catch (error) {
     console.error('Checkout error:', error);
-    return NextResponse.json(
-      { error: 'Failed to create checkout session' },
-      { status: 500 }
-    );
+    return errors.internalError('creating checkout session');
   }
 }

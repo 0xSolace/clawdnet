@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { generateAgentId, validateHandle } from '@/lib/identity';
 import { sanitizeName, sanitizeDescription, sanitizeUrl, sanitizeCapabilities } from '@/lib/sanitize';
 import { checkRateLimit, getClientIp, RATE_LIMITS, rateLimitHeaders } from '@/lib/rate-limit';
+import { errors, ErrorCode, errorResponse } from '@/lib/errors';
 
 function generateApiKey(): string {
   return `clawdnet_${crypto.randomBytes(24).toString('base64url')}`;
@@ -42,15 +43,11 @@ export async function POST(request: NextRequest) {
     const rateLimitResult = checkRateLimit(clientIp, RATE_LIMITS.register);
     
     if (!rateLimitResult.success) {
-      return NextResponse.json(
-        { 
-          error: 'Rate limit exceeded',
-          message: `Too many registration attempts. Try again in ${rateLimitResult.retryAfter} seconds.`,
-        },
-        { 
-          status: 429,
-          headers: rateLimitHeaders(rateLimitResult, RATE_LIMITS.register),
-        }
+      return errorResponse(
+        ErrorCode.RATE_LIMITED,
+        `Too many registration attempts. Try again in ${rateLimitResult.retryAfter} seconds.`,
+        { retryAfter: rateLimitResult.retryAfter },
+        rateLimitHeaders(rateLimitResult, RATE_LIMITS.register)
       );
     }
 
@@ -65,27 +62,24 @@ export async function POST(request: NextRequest) {
 
     // Validate required fields
     if (!name || !handle) {
-      return NextResponse.json(
-        { error: 'name and handle are required' },
-        { status: 400 }
-      );
+      const missing = [];
+      if (!name) missing.push('name');
+      if (!handle) missing.push('handle');
+      return errors.missingRequired(missing);
     }
 
     // Validate handle format
     const handleLower = handle.toLowerCase();
     const handleValidation = validateHandle(handleLower);
     if (!handleValidation.valid) {
-      return NextResponse.json(
-        { error: handleValidation.error || 'Invalid handle format' },
-        { status: 400 }
-      );
+      return errors.invalidHandle(handleValidation.error || 'Invalid format');
     }
     
     // Check for premium/reserved handles
     if (handleValidation.isReserved) {
-      return NextResponse.json(
-        { error: 'This handle is reserved and cannot be used' },
-        { status: 403 }
+      return errorResponse(
+        ErrorCode.FORBIDDEN,
+        `Handle '@${handleLower}' is reserved. Contact support@clawdnet.xyz to claim reserved handles.`
       );
     }
 
@@ -97,10 +91,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (existing) {
-      return NextResponse.json(
-        { error: 'Handle already taken' },
-        { status: 409 }
-      );
+      return errors.handleTaken(handleLower);
     }
 
     // Generate credentials
@@ -135,16 +126,10 @@ export async function POST(request: NextRequest) {
       
       // Handle unique constraint violation
       if (error.code === '23505') {
-        return NextResponse.json(
-          { error: 'Handle already taken' },
-          { status: 409 }
-        );
+        return errors.handleTaken(handleLower);
       }
       
-      return NextResponse.json(
-        { error: 'Failed to register agent' },
-        { status: 500 }
-      );
+      return errors.databaseError();
     }
 
     // Create initial stats
@@ -179,9 +164,6 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Error in agent registration:', error);
-    return NextResponse.json(
-      { error: 'Failed to register agent' },
-      { status: 500 }
-    );
+    return errors.internalError('registering agent');
   }
 }

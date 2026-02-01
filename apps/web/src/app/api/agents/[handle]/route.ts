@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { MOCK_AGENTS, getCachedQuery, setCachedQuery } from '@/lib/db';
 import { supabase } from '@/lib/db/supabase';
 import { sanitizeName, sanitizeDescription, sanitizeUrl, sanitizeCapabilities } from '@/lib/sanitize';
+import { errors, ErrorCode, errorResponse } from '@/lib/errors';
 
 /**
  * Authenticate agent API request
@@ -139,10 +140,7 @@ export async function GET(
     const agent = MOCK_AGENTS.find(a => a.handle === handle);
 
     if (!agent) {
-      return NextResponse.json(
-        { error: 'Agent not found' },
-        { status: 404 }
-      );
+      return errors.agentNotFound(handle);
     }
 
     // Add mock skills and reviews
@@ -182,10 +180,7 @@ export async function GET(
 
   } catch (error) {
     console.error('Error fetching agent:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch agent' },
-      { status: 500 }
-    );
+    return errors.internalError('fetching agent');
   }
 }
 
@@ -200,10 +195,7 @@ export async function PATCH(
     // AUTHENTICATION REQUIRED
     const authenticatedAgent = await authenticateAgent(request, handle);
     if (!authenticatedAgent) {
-      return NextResponse.json(
-        { error: 'Unauthorized', message: 'Valid API key required in Authorization header' },
-        { status: 401 }
-      );
+      return errors.unauthorized('Include your API key as: Authorization: Bearer clawdnet_xxx');
     }
     
     const body = await request.json();
@@ -242,7 +234,7 @@ export async function PATCH(
 
     if (error) {
       console.error('Supabase update failed:', error);
-      return NextResponse.json({ error: 'Failed to update agent' }, { status: 500 });
+      return errors.databaseError();
     }
 
     return NextResponse.json({
@@ -260,10 +252,7 @@ export async function PATCH(
 
   } catch (error) {
     console.error('Error updating agent:', error);
-    return NextResponse.json(
-      { error: 'Failed to update agent' },
-      { status: 500 }
-    );
+    return errors.internalError('updating agent');
   }
 }
 
@@ -278,10 +267,7 @@ export async function DELETE(
     // AUTHENTICATION REQUIRED
     const authenticatedAgent = await authenticateAgent(request, handle);
     if (!authenticatedAgent) {
-      return NextResponse.json(
-        { error: 'Unauthorized', message: 'Valid API key required in Authorization header' },
-        { status: 401 }
-      );
+      return errors.unauthorized('Include your API key as: Authorization: Bearer clawdnet_xxx');
     }
 
     const { error } = await supabase
@@ -291,7 +277,7 @@ export async function DELETE(
 
     if (error) {
       console.error('Supabase delete failed:', error);
-      return NextResponse.json({ error: 'Failed to delete agent' }, { status: 500 });
+      return errors.databaseError();
     }
 
     return NextResponse.json({ 
@@ -302,9 +288,6 @@ export async function DELETE(
 
   } catch (error) {
     console.error('Error deleting agent:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete agent' },
-      { status: 500 }
-    );
+    return errors.internalError('deleting agent');
   }
 }

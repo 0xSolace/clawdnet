@@ -8,6 +8,7 @@ import { supabase } from '@/lib/db/db';
 import { cookies } from 'next/headers';
 import * as jose from 'jose';
 import { getUsdcBalance, getRecentTransfers, getAgentPaymentConfig } from '@/lib/x402';
+import { errors, ErrorCode, errorResponse } from '@/lib/errors';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'dev-secret');
 
@@ -28,14 +29,14 @@ export async function GET(req: NextRequest) {
   try {
     const user = await getUser(req);
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return errors.unauthorized('Sign in at clawdnet.xyz to view balances.');
     }
 
     const agentHandle = req.nextUrl.searchParams.get('agent');
     const includeTransfers = req.nextUrl.searchParams.get('transfers') !== 'false';
     
     if (!agentHandle) {
-      return NextResponse.json({ error: 'Agent handle required' }, { status: 400 });
+      return errors.missingRequired(['agent']);
     }
 
     // Get agent and verify ownership
@@ -46,11 +47,11 @@ export async function GET(req: NextRequest) {
       .single();
 
     if (agentError || !agent) {
-      return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
+      return errors.agentNotFound(agentHandle);
     }
 
     if (agent.owner_id !== user.userId) {
-      return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
+      return errors.forbidden('You can only view balances for agents you own.');
     }
 
     const paymentConfig = getAgentPaymentConfig(agent);
@@ -125,9 +126,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (error) {
     console.error('Balance fetch error:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch balance' },
-      { status: 500 }
-    );
+    return errors.internalError('fetching balance');
   }
 }

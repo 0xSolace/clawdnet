@@ -1,156 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/db/supabase';
-
-// Verification check timeout
-const TIMEOUT_MS = 10000;
-
-interface VerificationResult {
-  passed: boolean;
-  checks: {
-    name: string;
-    status: 'pass' | 'fail' | 'skip';
-    message: string;
-    details?: Record<string, unknown>;
-  }[];
-  score: number;
-  level: 'none' | 'basic' | 'verified';
-}
+import { cookies } from 'next/headers';
+import { 
+  runVerification, 
+  calculateVerificationLevel,
+  type VerificationLevel,
+  type VerificationResult,
+} from '@/lib/identity';
 
 /**
- * Check if endpoint is reachable and returns valid response
- */
-async function checkEndpoint(endpoint: string): Promise<{
-  reachable: boolean;
-  responseTime: number;
-  statusCode?: number;
-  error?: string;
-}> {
-  const start = Date.now();
-  
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
-    
-    const response = await fetch(endpoint, {
-      method: 'GET',
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'ClawdNet-Verifier/1.0',
-      },
-    });
-    
-    clearTimeout(timeout);
-    const responseTime = Date.now() - start;
-    
-    return {
-      reachable: true,
-      responseTime,
-      statusCode: response.status,
-    };
-  } catch (error: any) {
-    return {
-      reachable: false,
-      responseTime: Date.now() - start,
-      error: error.name === 'AbortError' ? 'Request timeout' : error.message,
-    };
-  }
-}
-
-/**
- * Check if endpoint supports A2A protocol
- */
-async function checkA2AProtocol(endpoint: string): Promise<{
-  supported: boolean;
-  version?: string;
-  error?: string;
-}> {
-  try {
-    // Try common A2A discovery endpoints
-    const discoveryUrls = [
-      `${endpoint}/.well-known/agent.json`,
-      `${endpoint}/agent.json`,
-      endpoint,
-    ];
-    
-    for (const url of discoveryUrls) {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS / 2);
-        
-        const response = await fetch(url, {
-          method: 'GET',
-          signal: controller.signal,
-          headers: {
-            'Accept': 'application/json',
-            'User-Agent': 'ClawdNet-Verifier/1.0',
-          },
-        });
-        
-        clearTimeout(timeout);
-        
-        if (response.ok) {
-          const data = await response.json().catch(() => null);
-          if (data && (data.name || data.agentId || data.capabilities)) {
-            return {
-              supported: true,
-              version: data.version || '1.0',
-            };
-          }
-        }
-      } catch {
-        continue;
-      }
-    }
-    
-    return { supported: false };
-  } catch (error: any) {
-    return { supported: false, error: error.message };
-  }
-}
-
-/**
- * Check if endpoint supports ERC-8004
- */
-async function checkERC8004(endpoint: string): Promise<{
-  supported: boolean;
-  services?: string[];
-  error?: string;
-}> {
-  try {
-    const registrationUrl = `${endpoint}/.well-known/agent-registration`;
-    
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS / 2);
-    
-    const response = await fetch(registrationUrl, {
-      method: 'GET',
-      signal: controller.signal,
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'ClawdNet-Verifier/1.0',
-      },
-    });
-    
-    clearTimeout(timeout);
-    
-    if (response.ok) {
-      const data = await response.json().catch(() => null);
-      if (data && data.services) {
-        return {
-          supported: true,
-          services: data.services.map((s: any) => s.name || s.type),
-        };
-      }
-    }
-    
-    return { supported: false };
-  } catch (error: any) {
-    return { supported: false, error: error.message };
-  }
-}
-
-/**
- * POST /api/agents/[handle]/verify - Request verification for an agent
+ * POST /api/agents/[handle]/verify - Run verification checks for an agent
+ * 
+ * Can be triggered by:
+ * - Agent owner (authenticated)
+ * - System/admin (with API key)
+ * - Anyone (but results won't be saved without auth)
  */
 export async function POST(
   request: NextRequest,
@@ -159,10 +23,19 @@ export async function POST(
   const { handle } = await params;
   
   try {
-    // Get agent
+    // Get agent with stats
     const { data: agent, error: agentError } = await supabase
       .from('agents')
-      .select('id, handle, name, endpoint, protocols, is_verified, owner_id')
+      .select(`
+        id, handle, name, endpoint, protocols, is_verified, owner_id, 
+        verification_level, created_at,
+        agent_stats (
+          total_transactions,
+          avg_rating,
+          uptime_percent,
+          reputation_score
+        )
+      `)
       .eq('handle', handle.toLowerCase())
       .single();
     
@@ -173,105 +46,112 @@ export async function POST(
       );
     }
     
-    // Run verification checks
-    const checks: VerificationResult['checks'] = [];
-    let score = 0;
+    // Check if user is owner (for saving results)
+    let isOwner = false;
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get('clawdnet_session');
     
-    // Check 1: Endpoint reachable
-    const endpointCheck = await checkEndpoint(agent.endpoint);
-    checks.push({
-      name: 'Endpoint Reachable',
-      status: endpointCheck.reachable ? 'pass' : 'fail',
-      message: endpointCheck.reachable 
-        ? `Endpoint responded in ${endpointCheck.responseTime}ms (HTTP ${endpointCheck.statusCode})`
-        : `Failed to reach endpoint: ${endpointCheck.error}`,
-      details: endpointCheck,
+    if (sessionCookie?.value) {
+      try {
+        const session = JSON.parse(sessionCookie.value);
+        if (session.userId) {
+          const { data: user } = await supabase
+            .from('users')
+            .select('id')
+            .eq('id', session.userId)
+            .single();
+          
+          if (user && user.id === agent.owner_id) {
+            isOwner = true;
+          }
+        }
+      } catch {
+        // Invalid session, continue as non-owner
+      }
+    }
+    
+    // Check for API key auth (for batch operations)
+    const apiKey = request.headers.get('x-api-key');
+    let isAdmin = false;
+    if (apiKey) {
+      const { data: key } = await supabase
+        .from('api_keys')
+        .select('id, permissions')
+        .eq('key', apiKey)
+        .eq('is_active', true)
+        .single();
+      
+      if (key?.permissions?.includes('admin')) {
+        isAdmin = true;
+      }
+    }
+    
+    // Get user owner verified status
+    let ownerVerified = false;
+    if (agent.owner_id) {
+      const { data: owner } = await supabase
+        .from('users')
+        .select('wallet_address')
+        .eq('id', agent.owner_id)
+        .single();
+      
+      ownerVerified = !!owner?.wallet_address;
+    }
+    
+    // Run verification
+    const stats = (agent as any).agent_stats?.[0] || {};
+    const result = await runVerification({
+      id: agent.id,
+      handle: agent.handle,
+      name: agent.name,
+      endpoint: agent.endpoint,
+      protocols: agent.protocols || [],
+      isVerified: agent.is_verified,
+      ownerVerified,
+      stats: {
+        totalTransactions: stats.total_transactions,
+        avgRating: stats.avg_rating,
+        uptimePercent: stats.uptime_percent,
+      },
+      createdAt: agent.created_at,
     });
-    if (endpointCheck.reachable) score += 30;
     
-    // Check 2: A2A Protocol Support
-    const a2aCheck = await checkA2AProtocol(agent.endpoint);
-    checks.push({
-      name: 'A2A Protocol',
-      status: a2aCheck.supported ? 'pass' : 'skip',
-      message: a2aCheck.supported
-        ? `A2A protocol detected (v${a2aCheck.version})`
-        : 'A2A protocol not detected (optional)',
-      details: a2aCheck,
-    });
-    if (a2aCheck.supported) score += 20;
-    
-    // Check 3: ERC-8004 Support
-    const erc8004Check = await checkERC8004(agent.endpoint);
-    checks.push({
-      name: 'ERC-8004 Registration',
-      status: erc8004Check.supported ? 'pass' : 'skip',
-      message: erc8004Check.supported
-        ? `ERC-8004 services: ${erc8004Check.services?.join(', ')}`
-        : 'ERC-8004 registration not found (optional)',
-      details: erc8004Check,
-    });
-    if (erc8004Check.supported) score += 20;
-    
-    // Check 4: Response time
-    if (endpointCheck.reachable && endpointCheck.responseTime) {
-      const isfast = endpointCheck.responseTime < 1000;
-      checks.push({
-        name: 'Response Time',
-        status: isfast ? 'pass' : 'skip',
-        message: isfast
-          ? `Fast response time (${endpointCheck.responseTime}ms)`
-          : `Response time is ${endpointCheck.responseTime}ms (consider optimizing)`,
+    // Save results if owner or admin
+    if (isOwner || isAdmin) {
+      // Find check results
+      const endpointCheck = result.checks.find(c => c.name === 'Endpoint Health');
+      const a2aCheck = result.checks.find(c => c.name === 'A2A Protocol');
+      const erc8004Check = result.checks.find(c => c.name === 'ERC-8004 Registration');
+      
+      // Store verification record
+      await supabase.from('agent_verifications').insert({
+        agent_id: agent.id,
+        verification_level: result.level,
+        endpoint_reachable: endpointCheck?.status === 'pass',
+        endpoint_response_ms: (endpointCheck?.details as any)?.responseTime,
+        endpoint_status_code: (endpointCheck?.details as any)?.statusCode,
+        a2a_protocol_supported: a2aCheck?.status === 'pass',
+        a2a_version: (a2aCheck?.details as any)?.version,
+        erc8004_supported: erc8004Check?.status === 'pass',
+        erc8004_services: (erc8004Check?.details as any)?.services,
+        owner_verified: ownerVerified,
+        passed: result.passed,
+        score: result.score,
+        checked_at: result.checkedAt,
+        next_check_at: result.nextCheckAt,
       });
-      if (isfast) score += 10;
-    }
-    
-    // Check 5: Protocols declared
-    const hasProtocols = agent.protocols && agent.protocols.length > 0;
-    checks.push({
-      name: 'Protocols Declared',
-      status: hasProtocols ? 'pass' : 'skip',
-      message: hasProtocols
-        ? `Supports: ${agent.protocols.join(', ')}`
-        : 'No protocols declared',
-    });
-    if (hasProtocols) score += 20;
-    
-    // Determine verification level
-    const passed = endpointCheck.reachable;
-    let level: VerificationResult['level'] = 'none';
-    
-    if (score >= 50) {
-      level = 'verified';
-    } else if (passed) {
-      level = 'basic';
-    }
-    
-    // Update agent if verification passed
-    if (passed && !agent.is_verified) {
+      
+      // Update agent verification status
       await supabase
         .from('agents')
         .update({
-          is_verified: level !== 'none',
+          is_verified: result.level !== 'none',
+          verification_level: result.level,
+          last_verified_at: result.checkedAt,
           updated_at: new Date().toISOString(),
         })
         .eq('id', agent.id);
-      
-      // Update stats with last verification time
-      await supabase
-        .from('agent_stats')
-        .upsert({
-          agent_id: agent.id,
-          updated_at: new Date().toISOString(),
-        });
     }
-    
-    const result: VerificationResult = {
-      passed,
-      checks,
-      score,
-      level,
-    };
     
     return NextResponse.json({
       success: true,
@@ -279,9 +159,10 @@ export async function POST(
       agent: {
         handle: agent.handle,
         name: agent.name,
-        isVerified: level !== 'none',
-        verificationLevel: level,
+        isVerified: result.level !== 'none',
+        verificationLevel: result.level,
       },
+      saved: isOwner || isAdmin,
     });
     
   } catch (error) {
@@ -294,7 +175,7 @@ export async function POST(
 }
 
 /**
- * GET /api/agents/[handle]/verify - Get current verification status
+ * GET /api/agents/[handle]/verify - Get current verification status and history
  */
 export async function GET(
   request: NextRequest,
@@ -303,13 +184,16 @@ export async function GET(
   const { handle } = await params;
   
   try {
+    // Get agent with stats and latest verification
     const { data: agent, error } = await supabase
       .from('agents')
       .select(`
-        id, handle, name, is_verified, endpoint, protocols,
+        id, handle, name, is_verified, endpoint, protocols, owner_id,
+        verification_level, last_verified_at, created_at,
         agent_stats (
           reputation_score,
           total_transactions,
+          successful_transactions,
           avg_rating,
           uptime_percent
         )
@@ -324,26 +208,104 @@ export async function GET(
       );
     }
     
-    // Calculate verification level based on current data
-    const stats = (agent as any).agent_stats?.[0] || {};
-    let level: VerificationResult['level'] = 'none';
+    // Get latest verification result
+    const { data: latestVerification } = await supabase
+      .from('agent_verifications')
+      .select('*')
+      .eq('agent_id', agent.id)
+      .order('checked_at', { ascending: false })
+      .limit(1)
+      .single();
     
-    if (agent.is_verified) {
-      const hasGoodStats = 
-        Number(stats.total_transactions || 0) >= 10 &&
-        Number(stats.avg_rating || 0) >= 4.0;
-      level = hasGoodStats ? 'verified' : 'basic';
+    // Get verification history (last 10)
+    const { data: history } = await supabase
+      .from('agent_verifications')
+      .select('id, verification_level, passed, score, checked_at')
+      .eq('agent_id', agent.id)
+      .order('checked_at', { ascending: false })
+      .limit(10);
+    
+    // Check if user is owner
+    let isOwner = false;
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get('clawdnet_session');
+    
+    if (sessionCookie?.value) {
+      try {
+        const session = JSON.parse(sessionCookie.value);
+        if (session.userId && session.userId === agent.owner_id) {
+          isOwner = true;
+        }
+      } catch {
+        // Invalid session
+      }
     }
     
-    return NextResponse.json({
+    // Calculate current level
+    const stats = (agent as any).agent_stats?.[0] || {};
+    const level = calculateVerificationLevel({
+      isVerified: agent.is_verified,
+      verificationLevel: agent.verification_level as VerificationLevel,
+      protocols: agent.protocols || [],
+      stats: {
+        totalTransactions: stats.total_transactions,
+        avgRating: stats.avg_rating,
+        uptimePercent: stats.uptime_percent,
+      },
+      createdAt: agent.created_at,
+    });
+    
+    // Build response
+    const response: any = {
       handle: agent.handle,
       name: agent.name,
       isVerified: agent.is_verified,
       verificationLevel: level,
       endpoint: agent.endpoint,
       protocols: agent.protocols || [],
-      canRequestVerification: !agent.is_verified,
+      lastCheckedAt: agent.last_verified_at || latestVerification?.checked_at,
+      nextCheckAt: latestVerification?.next_check_at,
+      canRequestVerification: isOwner,
+      isOwner,
+    };
+    
+    // Include latest check details
+    if (latestVerification) {
+      response.latestCheck = {
+        passed: latestVerification.passed,
+        score: latestVerification.score,
+        checkedAt: latestVerification.checked_at,
+        checks: {
+          endpointReachable: latestVerification.endpoint_reachable,
+          endpointResponseMs: latestVerification.endpoint_response_ms,
+          a2aSupported: latestVerification.a2a_protocol_supported,
+          a2aVersion: latestVerification.a2a_version,
+          erc8004Supported: latestVerification.erc8004_supported,
+          ownerVerified: latestVerification.owner_verified,
+        },
+      };
+    }
+    
+    // Include history for owners
+    if (isOwner && history) {
+      response.history = history;
+    }
+    
+    // Calculate upgrade requirements
+    const upgradeBlockers = getUpgradeBlockers(level, {
+      stats,
+      protocols: agent.protocols,
+      createdAt: agent.created_at,
+      ownerVerified: latestVerification?.owner_verified,
+      a2aSupported: latestVerification?.a2a_protocol_supported,
     });
+    
+    if (upgradeBlockers.length > 0) {
+      response.upgradeBlockers = upgradeBlockers;
+      response.eligibleForUpgrade = getNextLevel(level);
+    }
+    
+    return NextResponse.json(response);
     
   } catch (error) {
     console.error('Error fetching verification status:', error);
@@ -351,5 +313,63 @@ export async function GET(
       { error: 'Failed to get verification status' },
       { status: 500 }
     );
+  }
+}
+
+/**
+ * Get what's blocking upgrade to next level
+ */
+function getUpgradeBlockers(
+  currentLevel: VerificationLevel,
+  data: {
+    stats: any;
+    protocols?: string[];
+    createdAt?: string;
+    ownerVerified?: boolean;
+    a2aSupported?: boolean;
+  }
+): string[] {
+  const blockers: string[] = [];
+  const { stats, protocols, createdAt, ownerVerified, a2aSupported } = data;
+  
+  if (currentLevel === 'none') {
+    blockers.push('Run verification to check endpoint health');
+    return blockers;
+  }
+  
+  if (currentLevel === 'basic') {
+    if (!a2aSupported && (!protocols || protocols.length === 0)) {
+      blockers.push('Add A2A protocol support (/.well-known/agent.json)');
+    }
+    if (!ownerVerified) {
+      blockers.push('Verify owner identity with wallet signature');
+    }
+    return blockers;
+  }
+  
+  if (currentLevel === 'verified') {
+    const transactions = stats?.total_transactions || 0;
+    const rating = Number(stats?.avg_rating) || 0;
+    const uptime = Number(stats?.uptime_percent) || 0;
+    const age = createdAt ? (Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24) : 0;
+    
+    if (transactions < 30) blockers.push(`Complete ${30 - transactions} more transactions`);
+    if (rating < 4.5) blockers.push(`Improve rating to 4.5+ (current: ${rating.toFixed(1)})`);
+    if (uptime < 95) blockers.push(`Improve uptime to 95%+ (current: ${uptime.toFixed(0)}%)`);
+    if (age < 30) blockers.push(`${Math.ceil(30 - age)} more days until trusted eligible`);
+  }
+  
+  return blockers;
+}
+
+/**
+ * Get next verification level
+ */
+function getNextLevel(current: VerificationLevel): VerificationLevel | undefined {
+  switch (current) {
+    case 'none': return 'basic';
+    case 'basic': return 'verified';
+    case 'verified': return 'trusted';
+    default: return undefined;
   }
 }

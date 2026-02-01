@@ -1,11 +1,21 @@
+import ora from 'ora';
 import { getAgents, Agent } from '../lib/api';
+import { colors, logError, logTip, outputJson, isJsonMode, logTitle, icons, logField } from '../lib/output';
 
-function getStatusEmoji(status: Agent['status']): string {
+export interface AgentsOptions {
+  json?: boolean;
+  query?: string;
+  type?: string;
+  capability?: string;
+  limit?: number;
+}
+
+function getStatusIcon(status: Agent['status']): string {
   switch (status) {
-    case 'online': return '🟢';
-    case 'offline': return '🔴';
-    case 'busy': return '🟡';
-    default: return '⚪';
+    case 'online': return colors.success(icons.online);
+    case 'offline': return colors.dim(icons.offline);
+    case 'busy': return colors.warning(icons.busy);
+    default: return icons.offline;
   }
 }
 
@@ -27,27 +37,59 @@ function formatLastSeen(lastSeen: string): string {
   }
 }
 
-export async function agentsCommand(): Promise<void> {
-  console.log('🤖 ClawdNet Agents\n');
+export async function agentsCommand(options: AgentsOptions = {}): Promise<void> {
+  const spinner = ora('Fetching agents...').start();
 
-  const response = await getAgents();
+  const response = await getAgents(options.query, options.type, options.capability);
 
   if (!response.success) {
-    console.error('❌ Failed to fetch agents:', response.error);
-    console.log('💡 Troubleshooting:');
-    console.log('   • Check your internet connection');
-    console.log('   • Verify ClawdNet API is accessible');
+    spinner.fail('Failed to fetch agents');
+
+    if (isJsonMode()) {
+      outputJson({ success: false, error: response.error });
+    } else {
+      logError('Could not fetch agents', response.error);
+      console.log();
+      logTip('Troubleshooting:');
+      console.log(`  ${colors.dim('•')} Check your internet connection`);
+      console.log(`  ${colors.dim('•')} Verify the ClawdNet API is accessible`);
+    }
     return;
   }
 
-  const agents = response.data || [];
+  let agents = response.data || [];
+  spinner.succeed(`Found ${agents.length} agent${agents.length === 1 ? '' : 's'}`);
+
+  // Apply limit
+  if (options.limit && options.limit > 0) {
+    agents = agents.slice(0, options.limit);
+  }
+
+  if (isJsonMode()) {
+    outputJson({
+      success: true,
+      count: agents.length,
+      agents: agents.map(a => ({
+        id: a.id,
+        handle: a.handle,
+        name: a.name,
+        type: a.type,
+        description: a.description,
+        capabilities: a.capabilities,
+        skills: a.skills,
+        status: a.status,
+        verified: a.verified,
+        lastSeen: a.lastSeen,
+      })),
+    });
+    return;
+  }
 
   if (agents.length === 0) {
-    console.log('📭 No agents found in the network');
+    console.log();
+    console.log(colors.dim('No agents found matching your criteria.'));
     return;
   }
-
-  console.log(`Found ${agents.length} agent${agents.length === 1 ? '' : 's'}:\n`);
 
   // Sort by status (online first) then by name
   const sortedAgents = agents.sort((a, b) => {
@@ -57,22 +99,29 @@ export async function agentsCommand(): Promise<void> {
     return a.name.localeCompare(b.name);
   });
 
+  console.log();
+
   for (const agent of sortedAgents) {
-    const statusEmoji = getStatusEmoji(agent.status);
-    const lastSeen = formatLastSeen(agent.lastSeen);
+    const statusIcon = getStatusIcon(agent.status);
+    const verifiedBadge = agent.verified ? colors.success(' ✔') : '';
+    const handle = agent.handle ? colors.cyan(`@${agent.handle}`) : '';
     
-    console.log(`${statusEmoji} ${agent.name} (${agent.type})`);
-    console.log(`   ID: ${agent.id}`);
+    console.log(`${statusIcon} ${colors.bold(agent.name)}${verifiedBadge} ${handle}`);
+    console.log(`  ${colors.dim('Type:')} ${agent.type} ${colors.dim('•')} ${colors.dim('ID:')} ${agent.id.slice(0, 8)}...`);
     
     if (agent.description) {
-      console.log(`   Description: ${agent.description}`);
+      console.log(`  ${colors.dim(agent.description)}`);
+    }
+    
+    if (agent.skills && agent.skills.length > 0) {
+      console.log(`  ${colors.dim('Skills:')} ${agent.skills.join(', ')}`);
     }
     
     if (agent.capabilities && agent.capabilities.length > 0) {
-      console.log(`   Capabilities: ${agent.capabilities.join(', ')}`);
+      console.log(`  ${colors.dim('Capabilities:')} ${agent.capabilities.join(', ')}`);
     }
     
-    console.log(`   Status: ${agent.status} • Last seen: ${lastSeen}`);
+    console.log(`  ${colors.dim(`Last seen ${formatLastSeen(agent.lastSeen)}`)}`);
     console.log();
   }
 }

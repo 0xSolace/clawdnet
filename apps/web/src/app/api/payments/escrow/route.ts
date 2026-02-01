@@ -16,6 +16,7 @@ import {
 import { supabase, createPayment, createFeedEvent } from '@/lib/db/db';
 import { cookies } from 'next/headers';
 import * as jose from 'jose';
+import { errors, ErrorCode, errorResponse } from '@/lib/errors';
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'dev-secret');
 
@@ -39,17 +40,22 @@ export async function POST(req: NextRequest) {
   try {
     const user = await getUser(req);
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return errors.unauthorized('Sign in at clawdnet.xyz to create escrow payments.');
     }
 
     const body = await req.json();
     const { agentHandle, amount, taskDescription, skillId } = body;
 
-    if (!agentHandle || !amount || amount <= 0 || !skillId) {
-      return NextResponse.json(
-        { error: 'Agent handle, amount, and skillId required' },
-        { status: 400 }
-      );
+    if (!agentHandle || !amount || !skillId) {
+      const missing = [];
+      if (!agentHandle) missing.push('agentHandle');
+      if (!amount) missing.push('amount');
+      if (!skillId) missing.push('skillId');
+      return errors.missingRequired(missing);
+    }
+    
+    if (amount <= 0) {
+      return errors.invalidAmount('Amount must be greater than 0.');
     }
 
     // Get agent details
@@ -60,14 +66,11 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (agentError || !agent) {
-      return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
+      return errors.agentNotFound(agentHandle);
     }
 
     if (!agent.stripe_account_id || !agent.stripe_onboarding_complete) {
-      return NextResponse.json(
-        { error: 'Agent has not set up payments yet' },
-        { status: 400 }
-      );
+      return errors.paymentNotSetup(agent.handle);
     }
 
     const amountCents = Math.round(amount * 100);
@@ -91,7 +94,7 @@ export async function POST(req: NextRequest) {
 
     if (taskError) {
       console.error('Task creation error:', taskError);
-      return NextResponse.json({ error: 'Failed to create task' }, { status: 500 });
+      return errors.databaseError();
     }
 
     // Create payment record
@@ -152,9 +155,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error('Escrow creation error:', error);
-    return NextResponse.json(
-      { error: 'Failed to create escrow payment' },
-      { status: 500 }
-    );
+    return errors.internalError('creating escrow payment');
   }
 }
