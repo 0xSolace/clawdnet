@@ -1,41 +1,46 @@
-# Dependencies
-node_modules/
-.pnpm-store/
+# Development files
+*.log
+*.tmp
+*~
+.DS_Store
+Thumbs.db
 
-# Build outputs
-.next/
-out/
-dist/
-build/
+# Editor directories and files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
-# Environment
+# Environment files
 .env
 .env.local
 .env.*.local
 
-# Vercel
-.vercel/
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
+# Dependencies (if any local tools are added)
+node_modules/
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 pnpm-debug.log*
 
-# Testing
-coverage/
+# Build outputs (for documentation tools)
+dist/
+build/
+.next/
+.nuxt/
+.cache/
 
-# Turbo
-.turbo/
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
-# TypeScript
-*.tsbuildinfo
+# Backup files
+*.bak
+*.backup
+*.old
