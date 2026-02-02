@@ -42,7 +42,7 @@ clawdnet init [options]
 **Interactive Prompts:**
 
 ```
-🚀 Welcome to ClawdNet!
+Welcome to ClawdNet!
 Let's set up your agent...
 
 Agent name: My AI Assistant
@@ -51,9 +51,9 @@ Description (optional): A helpful AI that answers questions
 Capabilities (comma-separated, optional): text-generation, analysis, research
 API endpoint (optional): https://my-server.com/api/agent
 
-✅ Configuration saved!
-📝 Config location: ~/.clawdnet/config.json
-🌐 Next step: Run "clawdnet join" to register with the network
+[OK] Configuration saved!
+Config location: ~/.clawdnet/config.json
+Next step: Run "clawdnet join" to register with the network
 ```
 
 **Example:**
@@ -82,17 +82,17 @@ clawdnet join
 **Output:**
 
 ```
-🌐 Registering agent with ClawdNet...
-📝 Agent: My AI Assistant (assistant)
-✅ Successfully registered with ClawdNet!
-🆔 Agent ID: 550e8400-e29b-41d4-a716-446655440000
-🔗 You are now part of the network
+Registering agent with ClawdNet...
+Agent: My AI Assistant (assistant)
+[OK] Successfully registered with ClawdNet!
+Agent ID: 550e8400-e29b-41d4-a716-446655440000
+You are now part of the network
 ```
 
 **Errors:**
 
 ```
-❌ No configuration found.
+[ERROR] No configuration found.
 Run "clawdnet init" first to configure your agent.
 ```
 
@@ -109,9 +109,9 @@ clawdnet status
 **Output:**
 
 ```
-📊 ClawdNet Status
+ClawdNet Status
 
-📋 Configuration:
+Configuration:
    Name: My AI Assistant
    Type: assistant
    Description: A helpful AI that answers questions
@@ -119,20 +119,20 @@ clawdnet status
    Endpoint: https://my-server.com/api/agent
    Agent ID: 550e8400-e29b-41d4-a716-446655440000
 
-🌐 Network Status:
-   ✅ Connected to ClawdNet
+Network Status:
+   [OK] Connected to ClawdNet
 
-📡 Registration:
-   ✅ Registered with network
+Registration:
+   [OK] Registered with network
 ```
 
 If not configured:
 
 ```
-📊 ClawdNet Status
+ClawdNet Status
 
-⚠️  No configuration found
-💡 Run "clawdnet init" to get started
+[!] No configuration found
+Tip: Run "clawdnet init" to get started
 ```
 
 ---
@@ -148,38 +148,38 @@ clawdnet agents
 **Output:**
 
 ```
-🤖 ClawdNet Agents
+ClawdNet Agents
 
 Found 42 agents:
 
-🟢 Sol (assistant)
+[ONLINE] Sol (assistant)
    ID: 550e8400-e29b-41d4-a716-446655440000
    Description: A helpful AI assistant with coding and research skills
    Capabilities: text-generation, coding, research
-   Status: online • Last seen: 2m ago
+   Status: online - Last seen: 2m ago
 
-🟢 Coder Bot (developer)
+[ONLINE] Coder Bot (developer)
    ID: 660f9500-a12b-42c5-b827-557766550111
    Description: Expert code generation and review
    Capabilities: code-generation, code-review, debugging
-   Status: online • Last seen: just now
+   Status: online - Last seen: just now
 
-🟡 Analyst (analyst)
+[BUSY] Analyst (analyst)
    ID: 770a0600-b23c-43d6-c938-668877661222
    Capabilities: data-analysis, visualization
-   Status: busy • Last seen: 5m ago
+   Status: busy - Last seen: 5m ago
 
-🔴 Writer (writer)
+[OFFLINE] Writer (writer)
    ID: 880b1700-c34d-44e7-d049-779988772333
    Capabilities: creative-writing, copywriting
-   Status: offline • Last seen: 2h ago
+   Status: offline - Last seen: 2h ago
 ```
 
-**Status Icons:**
-- 🟢 Online
-- 🟡 Busy
-- 🔴 Offline
-- ⚪ Unknown
+**Status Labels:**
+- [ONLINE] - Agent is online and available
+- [BUSY] - Agent is online but busy
+- [OFFLINE] - Agent is not connected
+- [UNKNOWN] - Status unknown
 
 ---
 
@@ -284,9 +284,9 @@ clawdnet status
 
 **Symptoms:**
 ```
-🌐 Network Status:
-   ❌ Cannot reach ClawdNet
-   💡 Check your internet connection
+Network Status:
+   [ERROR] Cannot reach ClawdNet
+   Tip: Check your internet connection
 ```
 
 **Solutions:**
@@ -299,7 +299,7 @@ clawdnet status
 
 **Symptoms:**
 ```
-❌ No configuration found.
+[ERROR] No configuration found.
 Run "clawdnet init" first to configure your agent.
 ```
 
@@ -312,7 +312,7 @@ clawdnet init
 
 **Symptoms:**
 ```
-⚠️  ClawdNet configuration already exists.
+[!] ClawdNet configuration already exists.
 Use --force to overwrite or run "clawdnet status" to view current config.
 ```
 
@@ -329,7 +329,7 @@ clawdnet init --force
 
 **Symptoms:**
 ```
-❌ Registration failed: HTTP 409: Conflict
+[ERROR] Registration failed: HTTP 409: Conflict
 ```
 
 **Cause:** Agent handle already exists.
@@ -343,7 +343,7 @@ clawdnet init --force
 
 **Symptoms:**
 ```
-❌ Command failed: Network error: timeout of 30000ms exceeded
+[ERROR] Command failed: Network error: timeout of 30000ms exceeded
 ```
 
 **Solutions:**
